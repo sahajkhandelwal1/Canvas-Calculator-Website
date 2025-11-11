@@ -77,23 +77,37 @@ The frontend will run on `http://localhost:5173`
 
 4. Modify assignment scores to see projected grade changes
 
-## Deployment
+## Deployment (Free!)
 
-### Backend (Flask)
+### Quick Deploy
 
-Deploy to platforms like:
-- **Heroku**: Add a `Procfile` with `web: gunicorn app:app`
-- **Railway**: Connect your repo and set build command
-- **Render**: Deploy as a web service
+Run the deployment helper:
+```bash
+./deploy.sh
+```
 
-### Frontend (React)
+Or follow the detailed guide in [DEPLOYMENT.md](DEPLOYMENT.md)
 
-Deploy to platforms like:
-- **Vercel**: `npm run build` and deploy the `dist` folder
-- **Netlify**: Connect your repo and set build command to `npm run build`
-- **GitHub Pages**: Build and deploy the `dist` folder
+### Recommended Free Hosting
 
-Remember to update the API endpoint in production!
+**Backend**: [Render](https://render.com) (Free tier)
+- Auto-deploys from GitHub
+- Free SSL
+- Sleeps after 15 min inactivity
+
+**Frontend**: [Vercel](https://vercel.com) (Free tier)
+- Instant deployments
+- Global CDN
+- Free SSL
+
+### Quick Steps
+
+1. Push to GitHub
+2. Deploy backend to Render (5 min)
+3. Deploy frontend to Vercel (2 min)
+4. Done! 🎉
+
+See [DEPLOYMENT.md](DEPLOYMENT.md) for step-by-step instructions.
 
 ## Security Note
 
