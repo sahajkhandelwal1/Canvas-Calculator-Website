@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { Analytics } from '@vercel/analytics/react'
 import './App.css'
 
 function App() {
@@ -391,6 +392,7 @@ function App() {
       {error && <div className="error">{error}</div>}
       </>
       )}
+      <Analytics />
     </div>
   )
 }
