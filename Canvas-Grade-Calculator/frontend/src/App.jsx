@@ -381,12 +381,39 @@ function App() {
           const group = groupMap[groupId]
           if (!group || groupAssignments.length === 0) return null
           
+          // Calculate category average
+          const gradedAssignments = groupAssignments.filter(({ score, assignment }) => {
+            const pointsPossible = assignment?.points_possible || 0
+            // Only include assignments that are graded AND have points possible > 0
+            return score !== null && score !== undefined && pointsPossible > 0
+          })
+          
+          let categoryAverage = null
+          if (gradedAssignments.length > 0) {
+            const totalEarned = gradedAssignments.reduce((sum, { score }) => {
+              return sum + (score || 0)
+            }, 0)
+            const totalPossible = gradedAssignments.reduce((sum, { assignment }) => {
+              return sum + (assignment?.points_possible || 0)
+            }, 0)
+            if (totalPossible > 0) {
+              categoryAverage = ((totalEarned / totalPossible) * 100).toFixed(2)
+            }
+          }
+          
           return (
             <div key={groupId} className="assignment-group">
-              <h3>
-                {group.name}
-                {group.group_weight > 0 && <span className="weight"> ({group.group_weight}%)</span>}
-              </h3>
+              <div className="group-header">
+                <h3>
+                  {group.name}
+                  {group.group_weight > 0 && <span className="weight"> ({group.group_weight}%)</span>}
+                </h3>
+                {categoryAverage !== null && (
+                  <div className="category-average">
+                    Average: <span className="average-value">{categoryAverage}%</span>
+                  </div>
+                )}
+              </div>
               <div className="assignments-list">
                 {groupAssignments.map(({ assignment, score, index }) => {
                   const pointsPossible = assignment?.points_possible || 0

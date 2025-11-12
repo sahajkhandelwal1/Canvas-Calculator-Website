@@ -251,11 +251,33 @@
   margin-bottom: 2rem;
 }
 
-.assignment-group h3 {
-  color: #fff;
+.group-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
   margin-bottom: 1rem;
   padding-bottom: 0.5rem;
   border-bottom: 2px solid rgba(99, 102, 241, 0.5);
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.assignment-group h3 {
+  color: #fff;
+  margin: 0;
+}
+
+.category-average {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.95rem;
+  font-weight: 500;
+}
+
+.average-value {
+  color: #667eea;
+  font-weight: 700;
+  font-size: 1.1rem;
+  margin-left: 0.25rem;
 }
 
 .weight {
