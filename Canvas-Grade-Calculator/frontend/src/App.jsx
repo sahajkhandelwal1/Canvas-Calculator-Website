@@ -81,6 +81,7 @@ function App() {
     setError('')
     setModifications({})
     setProjectedGrade(null)
+    setSelectedCourse({ id: courseId, name: 'Loading...', loading: true })
     
     try {
       const [assignmentsRes, groupsRes] = await Promise.all([
@@ -301,6 +302,16 @@ function App() {
         <h1>{selectedCourse.name}</h1>
       </div>
 
+      {loading && (
+        <div className="loading-overlay">
+          <div className="loading-spinner"></div>
+          <div className="loading-text">Loading course data...</div>
+        </div>
+      )}
+
+      {!loading && (
+        <>
+
       {currentGrade !== null && (
         <div className="grade-summary">
           <div className="grade-box">
@@ -378,6 +389,8 @@ function App() {
       </div>
 
       {error && <div className="error">{error}</div>}
+      </>
+      )}
     </div>
   )
 }
