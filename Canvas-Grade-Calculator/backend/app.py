@@ -106,6 +106,81 @@ def calculate_grade():
     grade = calculate_grade_logic(assignments, assignment_groups, modifications)
     return jsonify({'grade': grade})
 
+@app.route('/api/upcoming-assignments', methods=['POST'])
+def get_upcoming_assignments():
+    token = request.json.get('token')
+    if not token:
+        return jsonify({'error': 'Token required'}), 400
+    
+    headers = make_headers(token)
+    
+    try:
+        from datetime import datetime, timedelta
+        import concurrent.futures
+        
+        # Get all active courses
+        courses_url = f"{BASE_URL}/users/{USER_ID}/courses?enrollment_state=active&per_page=100"
+        courses_response = requests.get(courses_url, headers=headers)
+        courses_response.raise_for_status()
+        courses = courses_response.json()
+        
+        print(f"Found {len(courses)} courses")
+        
+        upcoming = []
+        from datetime import timezone
+        now = datetime.now(timezone.utc)
+        
+        def fetch_course_assignments(course):
+            course_id = course.get('id')
+            course_name = course.get('name', 'Unknown Course')
+            course_upcoming = []
+            
+            try:
+                # Get assignments for this course
+                assignments_url = f"{BASE_URL}/courses/{course_id}/assignments?per_page=50"
+                assignments_response = requests.get(assignments_url, headers=headers, timeout=5)
+                
+                if assignments_response.status_code == 200:
+                    assignments = assignments_response.json()
+                    print(f"Course {course_name}: {len(assignments)} assignments")
+                    
+                    for assignment in assignments:
+                        due_at = assignment.get('due_at')
+                        if due_at:
+                            try:
+                                due_date = datetime.fromisoformat(due_at.replace('Z', '+00:00'))
+                                # Only include future assignments (within next 60 days)
+                                if due_date > now and due_date < now + timedelta(days=60):
+                                    course_upcoming.append({
+                                        'course_name': course_name,
+                                        'assignment_name': assignment.get('name', 'Unnamed Assignment'),
+                                        'due_at': due_at,
+                                        'points_possible': assignment.get('points_possible', 0),
+                                        'html_url': assignment.get('html_url', '')
+                                    })
+                            except Exception as e:
+                                print(f"Error parsing assignment: {e}")
+                                pass
+            except:
+                pass
+            
+            return course_upcoming
+        
+        # Fetch assignments from all courses in parallel (max 5 at a time)
+        with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+            results = executor.map(fetch_course_assignments, courses)
+            for course_upcoming in results:
+                upcoming.extend(course_upcoming)
+        
+        # Sort by due date
+        upcoming.sort(key=lambda x: datetime.fromisoformat(x['due_at'].replace('Z', '+00:00')))
+        
+        print(f"Total upcoming assignments found: {len(upcoming)}")
+        
+        return jsonify(upcoming[:10])  # Return top 10 upcoming
+    except requests.exceptions.RequestException as e:
+        return jsonify({'error': str(e)}), 500
+
 def calculate_grade_logic(assignments, assignment_groups, modifications=None):
     group_map = {g['id']: g for g in assignment_groups}
     grouped_assignments = {}

@@ -1,8 +1,10 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import './App.css'
 
 function App() {
-  const [token, setToken] = useState('')
+  const [token, setToken] = useState(() => {
+    return localStorage.getItem('canvasToken') || ''
+  })
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [courses, setCourses] = useState([])
   const [selectedCourse, setSelectedCourse] = useState(null)
@@ -13,6 +15,18 @@ function App() {
   const [projectedGrade, setProjectedGrade] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [upcomingAssignments, setUpcomingAssignments] = useState([])
+  const [loadingUpcoming, setLoadingUpcoming] = useState(false)
+
+  // Auto-login if token exists
+  useEffect(() => {
+    const savedToken = localStorage.getItem('canvasToken')
+    if (savedToken && !isAuthenticated) {
+      setToken(savedToken)
+      // Trigger login automatically
+      handleLogin({ preventDefault: () => {} })
+    }
+  }, [])
 
   const handleLogin = async (e) => {
     e.preventDefault()
@@ -31,6 +45,30 @@ function App() {
       const data = await response.json()
       setCourses(data)
       setIsAuthenticated(true)
+      
+      // Save token to localStorage
+      localStorage.setItem('canvasToken', token)
+      
+      // Fetch upcoming assignments in background
+      setLoadingUpcoming(true)
+      fetch('/api/upcoming-assignments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token })
+      })
+        .then(res => {
+          if (res.ok) return res.json()
+          throw new Error('Failed to fetch')
+        })
+        .then(data => {
+          console.log('Upcoming assignments received:', data)
+          setUpcomingAssignments(data || [])
+          setLoadingUpcoming(false)
+        })
+        .catch(err => {
+          console.error('Error fetching upcoming:', err)
+          setLoadingUpcoming(false)
+        })
     } catch (err) {
       setError(err.message)
     } finally {
@@ -176,7 +214,11 @@ function App() {
       <div className="container">
         <div className="header">
           <h1>Your Courses</h1>
-          <button onClick={() => setIsAuthenticated(false)} className="logout-btn">
+          <button onClick={() => {
+            setIsAuthenticated(false)
+            localStorage.removeItem('canvasToken')
+            setToken('')
+          }} className="logout-btn">
             Logout
           </button>
         </div>
@@ -195,6 +237,55 @@ function App() {
             </div>
           ))}
         </div>
+
+        {(loadingUpcoming || upcomingAssignments.length > 0) && (
+          <div className="upcoming-section">
+            <h2>📋 Upcoming Assignments</h2>
+            {loadingUpcoming && (
+              <div className="loading-upcoming">Loading assignments...</div>
+            )}
+            {!loadingUpcoming && upcomingAssignments.length === 0 && (
+              <div className="no-upcoming">No upcoming assignments found</div>
+            )}
+            {!loadingUpcoming && upcomingAssignments.length > 0 && (
+            <div className="upcoming-list">
+              {upcomingAssignments.map((assignment, index) => {
+                const dueDate = new Date(assignment.due_at)
+                const now = new Date()
+                const daysUntil = Math.ceil((dueDate - now) / (1000 * 60 * 60 * 24))
+                const isUrgent = daysUntil <= 2
+                
+                return (
+                  <div key={index} className={`upcoming-item ${isUrgent ? 'urgent' : ''}`}>
+                    <div className="upcoming-info">
+                      <div className="upcoming-course">{assignment.course_name}</div>
+                      <div className="upcoming-name">{assignment.assignment_name}</div>
+                      <div className="upcoming-meta">
+                        <span className="upcoming-points">{assignment.points_possible} pts</span>
+                        <span className="upcoming-due">
+                          {isUrgent ? '🔥 ' : ''}
+                          Due {dueDate.toLocaleDateString()} at {dueDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                        </span>
+                      </div>
+                    </div>
+                    {assignment.html_url && (
+                      <a 
+                        href={assignment.html_url} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="view-btn"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        View
+                      </a>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+            )}
+          </div>
+        )}
       </div>
     )
   }
