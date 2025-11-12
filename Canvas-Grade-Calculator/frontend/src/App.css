@@ -135,12 +135,13 @@
 .course-card {
   background: rgba(255, 255, 255, 0.05);
   backdrop-filter: blur(20px);
-  padding: 1.5rem;
+  padding: 2rem;
   border-radius: 20px;
   border: 1px solid rgba(255, 255, 255, 0.1);
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
   cursor: pointer;
   transition: all 0.3s ease;
+  min-height: 140px;
 }
 
 .course-card:hover {
@@ -153,7 +154,8 @@
 .course-card h3 {
   margin-bottom: 1rem;
   color: #fff;
-  font-size: 1.1rem;
+  font-size: 1.25rem;
+  font-weight: 600;
 }
 
 .grade {
@@ -163,7 +165,7 @@
 }
 
 .grade-letter {
-  font-size: 2rem;
+  font-size: 2.5rem;
   font-weight: bold;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   -webkit-background-clip: text;
@@ -172,8 +174,9 @@
 }
 
 .grade-percent {
-  font-size: 1.2rem;
+  font-size: 1.4rem;
   color: rgba(255, 255, 255, 0.8);
+  font-weight: 500;
 }
 
 .no-grade {
@@ -549,4 +552,21 @@
   font-size: 1.1rem;
   font-weight: 500;
   animation: pulse 2s ease-in-out infinite;
+}
+
+
+
+.loading-watermark {
+  position: absolute;
+  bottom: 2rem;
+  left: 50%;
+  transform: translateX(-50%);
+  color: rgba(255, 255, 255, 0.3);
+  font-size: 0.8rem;
+  font-weight: 500;
+  letter-spacing: 0.5px;
+}
+
+.loading-overlay {
+  position: relative;
 }

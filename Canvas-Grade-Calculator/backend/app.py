@@ -59,8 +59,15 @@ def get_assignments(course_id):
     assignments = []
     try:
         while url:
-            response = requests.get(url, headers=headers)
+            response = requests.get(url, headers=headers, timeout=30)
             response.raise_for_status()
+            
+            # Check if response is JSON
+            content_type = response.headers.get('Content-Type', '')
+            if 'application/json' not in content_type:
+                print(f"Non-JSON response for course {course_id}: {content_type}")
+                return jsonify({'error': 'Invalid response from Canvas API'}), 500
+            
             submissions = response.json()
             assignments.extend(submissions)
             
@@ -75,6 +82,7 @@ def get_assignments(course_id):
         
         return jsonify(assignments)
     except requests.exceptions.RequestException as e:
+        print(f"Error fetching assignments for course {course_id}: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/course/<int:course_id>/groups', methods=['POST'])
@@ -267,6 +275,11 @@ def calculate_grade_logic(assignments, assignment_groups, modifications=None):
         total_earned = sum(a['earned'] for a in all_graded)
         total_possible = sum(a['possible'] for a in all_graded)
         return (total_earned / total_possible) * 100
+    
+    # Normalize the grade if weights don't add up to 100%
+    # Canvas does this automatically - scales the grade proportionally
+    if total_weight > 0 and total_weight != 100:
+        weighted_grade = (weighted_grade / total_weight) * 100
     
     return weighted_grade
 

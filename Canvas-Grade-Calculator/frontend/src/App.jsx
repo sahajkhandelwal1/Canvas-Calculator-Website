@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Analytics } from "@vercel/analytics/react"
+import CountUp from './CountUp'
 import './App.css'
 
 function App() {
@@ -98,10 +99,18 @@ function App() {
         })
       ])
       
-      if (!assignmentsRes.ok || !groupsRes.ok) throw new Error('Failed to load course data')
+      if (!assignmentsRes.ok || !groupsRes.ok) {
+        throw new Error('Failed to load course data. Please try refreshing.')
+      }
       
-      const assignmentsData = await assignmentsRes.json()
-      const groupsData = await groupsRes.json()
+      let assignmentsData, groupsData
+      try {
+        assignmentsData = await assignmentsRes.json()
+        groupsData = await groupsRes.json()
+      } catch (jsonError) {
+        console.error('JSON parse error:', jsonError)
+        throw new Error('Invalid response from Canvas API. Your session may have expired.')
+      }
       
       setAssignments(assignmentsData)
       setAssignmentGroups(groupsData)
@@ -231,7 +240,14 @@ function App() {
               {course.current_score !== null ? (
                 <div className="grade">
                   <span className="grade-letter">{course.current_grade}</span>
-                  <span className="grade-percent">{course.current_score?.toFixed(2)}%</span>
+                  <span className="grade-percent">
+                    <CountUp 
+                      from={0} 
+                      to={course.current_score} 
+                      duration={1}
+                      className="count-up-text"
+                    />%
+                  </span>
                 </div>
               ) : (
                 <div className="no-grade">No grade yet</div>
@@ -307,6 +323,7 @@ function App() {
         <div className="loading-overlay">
           <div className="loading-spinner"></div>
           <div className="loading-text">Loading course data...</div>
+          <div className="loading-watermark">Made by Sahaj Khandelwal</div>
         </div>
       )}
 
@@ -317,18 +334,38 @@ function App() {
         <div className="grade-summary">
           <div className="grade-box">
             <label>Current Grade</label>
-            <div className="grade-value">{currentGrade.toFixed(2)}%</div>
+            <div className="grade-value">
+              <CountUp 
+                from={0} 
+                to={currentGrade} 
+                duration={1}
+                className="count-up-text"
+              />%
+            </div>
           </div>
           {projectedGrade !== null && (
             <>
               <div className="grade-box">
                 <label>Projected Grade</label>
-                <div className="grade-value">{projectedGrade.toFixed(2)}%</div>
+                <div className="grade-value">
+                  <CountUp 
+                    from={currentGrade} 
+                    to={projectedGrade} 
+                    duration={1}
+                    className="count-up-text"
+                  />%
+                </div>
               </div>
               <div className="grade-box">
                 <label>Change</label>
                 <div className={`grade-value ${projectedGrade - currentGrade >= 0 ? 'positive' : 'negative'}`}>
-                  {(projectedGrade - currentGrade >= 0 ? '+' : '')}{(projectedGrade - currentGrade).toFixed(2)}%
+                  {(projectedGrade - currentGrade >= 0 ? '+' : '')}
+                  <CountUp 
+                    from={0} 
+                    to={Math.abs(projectedGrade - currentGrade)} 
+                    duration={1}
+                    className="count-up-text"
+                  />%
                 </div>
               </div>
             </>
