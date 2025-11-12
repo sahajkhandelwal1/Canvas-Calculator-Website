@@ -381,7 +381,7 @@ function App() {
           const group = groupMap[groupId]
           if (!group || groupAssignments.length === 0) return null
           
-          // Calculate category average
+          // Calculate category average (current and projected)
           const gradedAssignments = groupAssignments.filter(({ score, assignment }) => {
             const pointsPossible = assignment?.points_possible || 0
             // Only include assignments that are graded AND have points possible > 0
@@ -389,15 +389,33 @@ function App() {
           })
           
           let categoryAverage = null
+          let projectedCategoryAverage = null
+          let hasModifications = false
+          
           if (gradedAssignments.length > 0) {
+            // Current average
             const totalEarned = gradedAssignments.reduce((sum, { score }) => {
               return sum + (score || 0)
             }, 0)
             const totalPossible = gradedAssignments.reduce((sum, { assignment }) => {
               return sum + (assignment?.points_possible || 0)
             }, 0)
+            
             if (totalPossible > 0) {
               categoryAverage = ((totalEarned / totalPossible) * 100).toFixed(2)
+            }
+            
+            // Projected average (with modifications)
+            const totalEarnedModified = gradedAssignments.reduce((sum, { score, index }) => {
+              const modifiedScore = modifications[index] !== undefined ? modifications[index] : score
+              return sum + (modifiedScore || 0)
+            }, 0)
+            
+            if (totalPossible > 0) {
+              projectedCategoryAverage = ((totalEarnedModified / totalPossible) * 100).toFixed(2)
+              hasModifications = Object.keys(modifications).some(modIndex => 
+                gradedAssignments.some(({ index }) => index === parseInt(modIndex))
+              )
             }
           }
           
@@ -411,6 +429,18 @@ function App() {
                 {categoryAverage !== null && (
                   <div className="category-average">
                     Average: <span className="average-value">{categoryAverage}%</span>
+                    {hasModifications && projectedCategoryAverage !== categoryAverage && (
+                      <>
+                        <span className="arrow">→</span>
+                        <span className={`projected-value ${parseFloat(projectedCategoryAverage) >= parseFloat(categoryAverage) ? 'positive' : 'negative'}`}>
+                          {projectedCategoryAverage}%
+                        </span>
+                        <span className={`change-badge ${parseFloat(projectedCategoryAverage) >= parseFloat(categoryAverage) ? 'positive' : 'negative'}`}>
+                          {parseFloat(projectedCategoryAverage) >= parseFloat(categoryAverage) ? '+' : ''}
+                          {(parseFloat(projectedCategoryAverage) - parseFloat(categoryAverage)).toFixed(2)}%
+                        </span>
+                      </>
+                    )}
                   </div>
                 )}
               </div>
