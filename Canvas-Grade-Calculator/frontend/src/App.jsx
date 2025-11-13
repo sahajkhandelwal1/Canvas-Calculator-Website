@@ -483,7 +483,12 @@ function App() {
         </button>
       </div>
 
-      {error && <div className="error">{error}</div>}
+      {error && (
+        <div className="error">
+          <strong>Error:</strong> {error}
+          <button onClick={() => setError('')} className="dismiss-error">Dismiss</button>
+        </div>
+      )}
       </>
       )}
       <Analytics />

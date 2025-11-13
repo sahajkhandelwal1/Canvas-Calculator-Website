@@ -54,23 +54,49 @@ def get_assignments(course_id):
         return jsonify({'error': 'Token required'}), 400
     
     headers = make_headers(token)
-    url = f"{BASE_URL}/courses/{course_id}/students/submissions?student_ids[]={USER_ID}&include[]=assignment&per_page=100"
+    url = f"{BASE_URL}/courses/{course_id}/students/submissions?student_ids[]={USER_ID}&include[]=assignment&per_page=50"
     
     assignments = []
+    max_retries = 2
+    
     try:
         while url:
-            response = requests.get(url, headers=headers, timeout=30)
-            response.raise_for_status()
+            retry_count = 0
+            success = False
             
-            # Check if response is JSON
-            content_type = response.headers.get('Content-Type', '')
-            if 'application/json' not in content_type:
-                print(f"Non-JSON response for course {course_id}: {content_type}")
-                return jsonify({'error': 'Invalid response from Canvas API'}), 500
+            while retry_count < max_retries and not success:
+                try:
+                    response = requests.get(url, headers=headers, timeout=45)
+                    response.raise_for_status()
+                    
+                    # Check if response is JSON
+                    content_type = response.headers.get('Content-Type', '')
+                    if 'application/json' not in content_type:
+                        print(f"Non-JSON response for course {course_id}: {content_type}")
+                        print(f"Response preview: {response.text[:200]}")
+                        retry_count += 1
+                        if retry_count < max_retries:
+                            import time
+                            time.sleep(2)
+                            continue
+                        return jsonify({'error': 'Canvas returned an invalid response. The course may be too large or temporarily unavailable.'}), 500
+                    
+                    submissions = response.json()
+                    assignments.extend(submissions)
+                    success = True
+                    
+                except requests.exceptions.Timeout:
+                    retry_count += 1
+                    if retry_count < max_retries:
+                        print(f"Timeout for course {course_id}, retrying...")
+                        import time
+                        time.sleep(2)
+                    else:
+                        raise
             
-            submissions = response.json()
-            assignments.extend(submissions)
-            
+            if not success:
+                break
+                
             if 'link' in response.headers:
                 links = response.headers['link'].split(',')
                 url = None
@@ -80,10 +106,11 @@ def get_assignments(course_id):
             else:
                 url = None
         
+        print(f"Successfully fetched {len(assignments)} assignments for course {course_id}")
         return jsonify(assignments)
     except requests.exceptions.RequestException as e:
         print(f"Error fetching assignments for course {course_id}: {str(e)}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': f'Failed to load course data: {str(e)}'}), 500
 
 @app.route('/api/course/<int:course_id>/groups', methods=['POST'])
 def get_assignment_groups(course_id):
@@ -218,14 +245,14 @@ def calculate_grade_logic(assignments, assignment_groups, modifications=None):
         
         all_assignments = []
         for i, s, assignment in group_assignments:
-            points_possible = assignment.get("points_possible", 0)
+            points_possible = assignment.get("points_possible") or 0
             points_earned = s.get("score")
             assignment_id = assignment.get("id")
             
             if modifications and i in modifications:
                 points_earned = modifications[i]
             
-            if points_possible > 0 and points_earned is not None:
+            if points_possible and points_possible > 0 and points_earned is not None:
                 percentage = (points_earned / points_possible) * 100
                 all_assignments.append({
                     'earned': points_earned,
