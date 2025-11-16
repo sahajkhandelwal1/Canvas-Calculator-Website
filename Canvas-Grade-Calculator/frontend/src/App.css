@@ -653,3 +653,9 @@
 .dismiss-error:hover {
   background: rgba(255, 255, 255, 0.2);
 }
+
+.assignment-percentage {
+  color: rgba(99, 102, 241, 0.9);
+  font-weight: 600;
+  margin-right: 0.25rem;
+}

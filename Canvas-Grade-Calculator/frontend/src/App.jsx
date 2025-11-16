@@ -448,13 +448,23 @@ function App() {
                 {groupAssignments.map(({ assignment, score, index }) => {
                   const pointsPossible = assignment?.points_possible || 0
                   const currentScore = modifications[index] !== undefined ? modifications[index] : score
+                  const percentage = pointsPossible > 0 && score !== null ? ((score / pointsPossible) * 100).toFixed(2) : null
                   
                   return (
                     <div key={index} className="assignment-item">
                       <div className="assignment-info">
                         <span className="assignment-name">{assignment?.name || 'Unknown'}</span>
                         <span className="assignment-points">
-                          {score !== null ? `${score} / ${pointsPossible}` : `Not graded / ${pointsPossible}`}
+                          {score !== null ? (
+                            <>
+                              {percentage !== null && (
+                                <span className="assignment-percentage">({percentage}%) </span>
+                              )}
+                              {score} / {pointsPossible}
+                            </>
+                          ) : (
+                            `Not graded / ${pointsPossible}`
+                          )}
                         </span>
                       </div>
                       <input
