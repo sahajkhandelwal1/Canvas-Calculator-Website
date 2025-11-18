@@ -1,7 +1,79 @@
 import { useState, useEffect } from 'react'
 import { Analytics } from "@vercel/analytics/react"
 import CountUp from './CountUp'
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+} from '@dnd-kit/core'
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  rectSortingStrategy,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 import './App.css'
+
+function SortableCourseCard({ course, onClick }) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ 
+    id: course.id,
+    transition: {
+      duration: 200,
+      easing: 'cubic-bezier(0.25, 1, 0.5, 1)',
+    },
+  })
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition: transition || 'transform 200ms cubic-bezier(0.25, 1, 0.5, 1)',
+  }
+
+  const handleClick = (e) => {
+    if (!isDragging) {
+      onClick()
+    }
+  }
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      {...attributes}
+      {...listeners}
+      className={`course-card ${isDragging ? 'dragging' : ''}`}
+      onClick={handleClick}
+    >
+      <h3>{course.name}</h3>
+      {course.current_score !== null ? (
+        <div className="grade">
+          <span className="grade-letter">{course.current_grade}</span>
+          <span className="grade-percent">
+            <CountUp 
+              from={0} 
+              to={course.current_score} 
+              duration={1}
+              className="count-up-text"
+            />%
+          </span>
+        </div>
+      ) : (
+        <div className="no-grade">No grade yet</div>
+      )}
+    </div>
+  )
+}
 
 function App() {
   const [token, setToken] = useState(() => {
@@ -19,6 +91,38 @@ function App() {
   const [error, setError] = useState('')
   const [upcomingAssignments, setUpcomingAssignments] = useState([])
   const [loadingUpcoming, setLoadingUpcoming] = useState(false)
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8, // Require 8px movement before drag starts
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  )
+
+  const handleDragEnd = (event) => {
+    const { active, over } = event
+
+    if (active.id !== over.id) {
+      setCourses((items) => {
+        const oldIndex = items.findIndex((item) => item.id === active.id)
+        const newIndex = items.findIndex((item) => item.id === over.id)
+        const newOrder = arrayMove(items, oldIndex, newIndex)
+        
+        // Save order to localStorage
+        const orderMap = {}
+        newOrder.forEach((course, index) => {
+          orderMap[course.id] = index
+        })
+        localStorage.setItem('courseOrder', JSON.stringify(orderMap))
+        
+        return newOrder
+      })
+    }
+  }
 
   // Auto-login if token exists
   useEffect(() => {
@@ -45,7 +149,25 @@ function App() {
       if (!response.ok) throw new Error('Invalid token or network error')
       
       const data = await response.json()
-      setCourses(data)
+      
+      // Load saved course order
+      const savedOrder = localStorage.getItem('courseOrder')
+      if (savedOrder) {
+        try {
+          const orderMap = JSON.parse(savedOrder)
+          const orderedCourses = [...data].sort((a, b) => {
+            const orderA = orderMap[a.id] ?? 999
+            const orderB = orderMap[b.id] ?? 999
+            return orderA - orderB
+          })
+          setCourses(orderedCourses)
+        } catch {
+          setCourses(data)
+        }
+      } else {
+        setCourses(data)
+      }
+      
       setIsAuthenticated(true)
       
       // Save token to localStorage
@@ -233,28 +355,26 @@ function App() {
             Logout
           </button>
         </div>
-        <div className="courses-grid">
-          {courses.map(course => (
-            <div key={course.id} className="course-card" onClick={() => loadCourse(course.id)}>
-              <h3>{course.name}</h3>
-              {course.current_score !== null ? (
-                <div className="grade">
-                  <span className="grade-letter">{course.current_grade}</span>
-                  <span className="grade-percent">
-                    <CountUp 
-                      from={0} 
-                      to={course.current_score} 
-                      duration={1}
-                      className="count-up-text"
-                    />%
-                  </span>
-                </div>
-              ) : (
-                <div className="no-grade">No grade yet</div>
-              )}
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragEnd={handleDragEnd}
+        >
+          <SortableContext
+            items={courses.map(c => c.id)}
+            strategy={rectSortingStrategy}
+          >
+            <div className="courses-grid">
+              {courses.map(course => (
+                <SortableCourseCard
+                  key={course.id}
+                  course={course}
+                  onClick={() => loadCourse(course.id)}
+                />
+              ))}
             </div>
-          ))}
-        </div>
+          </SortableContext>
+        </DndContext>
 
         {(loadingUpcoming || upcomingAssignments.length > 0) && (
           <div className="upcoming-section">

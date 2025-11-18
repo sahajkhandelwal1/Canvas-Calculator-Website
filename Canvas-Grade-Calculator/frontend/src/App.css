@@ -659,3 +659,51 @@
   font-weight: 600;
   margin-right: 0.25rem;
 }
+
+.course-card {
+  touch-action: none;
+  user-select: none;
+  cursor: pointer;
+  position: relative;
+  will-change: transform;
+}
+
+.course-card:hover {
+  cursor: grab;
+}
+
+.course-card:active {
+  cursor: grabbing;
+}
+
+.course-card.dragging {
+  cursor: grabbing !important;
+}
+
+.course-card.dragging {
+  opacity: 0.4;
+  border: 2px dashed rgba(99, 102, 241, 0.6);
+  background: rgba(99, 102, 241, 0.1);
+  z-index: 1000;
+}
+
+.course-card.dragging::before {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border: 2px solid rgba(99, 102, 241, 0.8);
+  border-radius: 20px;
+  pointer-events: none;
+  animation: pulse-border 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse-border {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.5;
+    transform: scale(1.02);
+  }
+}
