@@ -583,10 +583,25 @@ function App() {
                   const currentScore = modifications[index] !== undefined ? modifications[index] : score
                   const percentage = pointsPossible > 0 && score !== null ? ((score / pointsPossible) * 100).toFixed(2) : null
                   
+                  const assignmentUrl = assignment?.html_url
+                  
+                  const handleAssignmentClick = (e) => {
+                    if (assignmentUrl && e.target.tagName !== 'INPUT') {
+                      window.open(assignmentUrl, '_blank', 'noopener,noreferrer')
+                    }
+                  }
+                  
                   return (
-                    <div key={index} className="assignment-item">
+                    <div 
+                      key={index} 
+                      className={`assignment-item ${assignmentUrl ? 'clickable' : ''}`}
+                      onClick={handleAssignmentClick}
+                    >
                       <div className="assignment-info">
-                        <span className="assignment-name">{assignment?.name || 'Unknown'}</span>
+                        <span className="assignment-name">
+                          {assignment?.name || 'Unknown'}
+                          {assignmentUrl && <span className="external-link-icon"> ↗</span>}
+                        </span>
                         <span className="assignment-points">
                           {score !== null ? (
                             <>
