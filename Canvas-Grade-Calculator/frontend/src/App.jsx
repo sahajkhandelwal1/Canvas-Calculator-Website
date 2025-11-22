@@ -317,7 +317,7 @@ function App() {
     return (
       <div className="container">
         <div className="login-card">
-          <h1>Canvas Grade Calculator</h1>
+          <h1>Canvas Plus</h1>
           <div className="instructions">
             <p>To get your Canvas API token:</p>
             <ol>
