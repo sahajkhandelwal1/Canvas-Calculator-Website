@@ -18,6 +18,20 @@ def get_courses():
         return jsonify({'error': 'Token required'}), 400
     
     headers = make_headers(token)
+    
+    # Get user info for logging
+    try:
+        user_response = requests.get(f"{BASE_URL}/users/{USER_ID}", headers=headers, timeout=5)
+        if user_response.status_code == 200:
+            user_data = user_response.json()
+            username = user_data.get('name', 'Unknown User')
+            user_id = user_data.get('id', 'Unknown ID')
+            print(f"\n{'='*60}")
+            print(f"USER LOGIN: {username} (ID: {user_id})")
+            print(f"{'='*60}")
+    except:
+        print("\nUSER LOGIN: Unable to fetch user info")
+    
     courses_url = f"{BASE_URL}/users/{USER_ID}/courses?enrollment_state=active&include[]=enrollments&include[]=total_scores"
     
     try:
