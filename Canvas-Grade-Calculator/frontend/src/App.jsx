@@ -79,6 +79,9 @@ function App() {
   const [token, setToken] = useState(() => {
     return localStorage.getItem('canvasToken') || ''
   })
+  const [canvasUrl, setCanvasUrl] = useState(() => {
+    return localStorage.getItem('canvasUrl') || 'cuhsd.instructure.com'
+  })
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [courses, setCourses] = useState([])
   const [selectedCourse, setSelectedCourse] = useState(null)
@@ -143,7 +146,7 @@ function App() {
       const response = await fetch('/api/courses', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token })
+        body: JSON.stringify({ token, canvasUrl })
       })
       
       if (!response.ok) throw new Error('Invalid token or network error')
@@ -170,15 +173,16 @@ function App() {
       
       setIsAuthenticated(true)
       
-      // Save token to localStorage
+      // Save token and Canvas URL to localStorage
       localStorage.setItem('canvasToken', token)
+      localStorage.setItem('canvasUrl', canvasUrl)
       
       // Fetch upcoming assignments in background
       setLoadingUpcoming(true)
       fetch('/api/upcoming-assignments', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token })
+        body: JSON.stringify({ token, canvasUrl })
       })
         .then(res => {
           if (res.ok) return res.json()
@@ -212,12 +216,12 @@ function App() {
         fetch(`/api/course/${courseId}/assignments`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ token })
+          body: JSON.stringify({ token, canvasUrl })
         }),
         fetch(`/api/course/${courseId}/groups`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ token })
+          body: JSON.stringify({ token, canvasUrl })
         })
       ])
       
@@ -326,6 +330,13 @@ function App() {
           </div>
           <form onSubmit={handleLogin}>
             <input
+              type="text"
+              placeholder="Canvas URL (e.g., school.instructure.com)"
+              value={canvasUrl}
+              onChange={(e) => setCanvasUrl(e.target.value.replace(/^https?:\/\//, '').replace(/\/$/, ''))}
+              required
+            />
+            <input
               type="password"
               placeholder="Enter your Canvas API token"
               value={token}
@@ -350,7 +361,9 @@ function App() {
           <button onClick={() => {
             setIsAuthenticated(false)
             localStorage.removeItem('canvasToken')
+            localStorage.removeItem('canvasUrl')
             setToken('')
+            setCanvasUrl('cuhsd.instructure.com')
           }} className="logout-btn">
             Logout
           </button>

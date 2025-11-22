@@ -5,18 +5,26 @@ import requests
 app = Flask(__name__)
 CORS(app)
 
-BASE_URL = "https://cuhsd.instructure.com/api/v1"
 USER_ID = "self"
 
 def make_headers(token):
     return {"Authorization": f"Bearer {token}"}
 
+def get_base_url(canvas_url):
+    """Construct base URL from canvas domain"""
+    # Remove any protocol and trailing slashes
+    clean_url = canvas_url.replace('https://', '').replace('http://', '').rstrip('/')
+    return f"https://{clean_url}/api/v1"
+
 @app.route('/api/courses', methods=['POST'])
 def get_courses():
     token = request.json.get('token')
+    canvas_url = request.json.get('canvasUrl', 'cuhsd.instructure.com')
+    
     if not token:
         return jsonify({'error': 'Token required'}), 400
     
+    BASE_URL = get_base_url(canvas_url)
     headers = make_headers(token)
     
     # Get user info for logging
@@ -27,10 +35,10 @@ def get_courses():
             username = user_data.get('name', 'Unknown User')
             user_id = user_data.get('id', 'Unknown ID')
             print(f"\n{'='*60}")
-            print(f"USER LOGIN: {username} (ID: {user_id})")
+            print(f"USER LOGIN: {username} (ID: {user_id}) - {canvas_url}")
             print(f"{'='*60}")
     except:
-        print("\nUSER LOGIN: Unable to fetch user info")
+        print(f"\nUSER LOGIN: Unable to fetch user info - {canvas_url}")
     
     courses_url = f"{BASE_URL}/users/{USER_ID}/courses?enrollment_state=active&include[]=enrollments&include[]=total_scores"
     
@@ -64,9 +72,12 @@ def get_courses():
 @app.route('/api/course/<int:course_id>/assignments', methods=['POST'])
 def get_assignments(course_id):
     token = request.json.get('token')
+    canvas_url = request.json.get('canvasUrl', 'cuhsd.instructure.com')
+    
     if not token:
         return jsonify({'error': 'Token required'}), 400
     
+    BASE_URL = get_base_url(canvas_url)
     headers = make_headers(token)
     url = f"{BASE_URL}/courses/{course_id}/students/submissions?student_ids[]={USER_ID}&include[]=assignment&per_page=50"
     
@@ -129,9 +140,12 @@ def get_assignments(course_id):
 @app.route('/api/course/<int:course_id>/groups', methods=['POST'])
 def get_assignment_groups(course_id):
     token = request.json.get('token')
+    canvas_url = request.json.get('canvasUrl', 'cuhsd.instructure.com')
+    
     if not token:
         return jsonify({'error': 'Token required'}), 400
     
+    BASE_URL = get_base_url(canvas_url)
     headers = make_headers(token)
     url = f"{BASE_URL}/courses/{course_id}/assignment_groups?include[]=assignments"
     
@@ -158,9 +172,12 @@ def calculate_grade():
 @app.route('/api/upcoming-assignments', methods=['POST'])
 def get_upcoming_assignments():
     token = request.json.get('token')
+    canvas_url = request.json.get('canvasUrl', 'cuhsd.instructure.com')
+    
     if not token:
         return jsonify({'error': 'Token required'}), 400
     
+    BASE_URL = get_base_url(canvas_url)
     headers = make_headers(token)
     
     try:
