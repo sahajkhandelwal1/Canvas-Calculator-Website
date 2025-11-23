@@ -96,6 +96,58 @@ function App() {
   const [loadingUpcoming, setLoadingUpcoming] = useState(false)
   const [hypotheticalAssignments, setHypotheticalAssignments] = useState({})
   const [showSlowLoadingMessage, setShowSlowLoadingMessage] = useState(false)
+  const [showBgCustomizer, setShowBgCustomizer] = useState(false)
+  const [backgroundImage, setBackgroundImage] = useState(() => {
+    return localStorage.getItem('backgroundImage') || 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=1920&q=80'
+  })
+
+  const presetBackgrounds = [
+    { name: 'Network', url: 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=1920&q=80' },
+    { name: 'Ocean Waves', url: 'https://images.unsplash.com/photo-1505142468610-359e7d316be0?w=1920&q=80' },
+    { name: 'Mountain Peak', url: 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=1920&q=80' },
+    { name: 'City Lights', url: 'https://images.unsplash.com/photo-1514565131-fce0801e5785?w=1920&q=80' },
+    { name: 'Forest Path', url: 'https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=1920&q=80' },
+    { name: 'Desert Dunes', url: 'https://images.unsplash.com/photo-1509316785289-025f5b846b35?w=1920&q=80' },
+    { name: 'Northern Lights', url: 'https://images.unsplash.com/photo-1531366936337-7c912a4589a7?w=1920&q=80' },
+    { name: 'Dark Gradient', url: '' },
+  ]
+
+  const changeBackground = (url) => {
+    setBackgroundImage(url)
+    localStorage.setItem('backgroundImage', url)
+    document.body.style.backgroundImage = url 
+      ? `linear-gradient(135deg, rgba(0, 0, 0, 0.6) 0%, rgba(26, 26, 26, 0.65) 50%, rgba(10, 10, 10, 0.6) 100%), url('${url}')`
+      : 'linear-gradient(135deg, #000000 0%, #1a1a1a 50%, #0a0a0a 100%)'
+  }
+
+  const handleCustomImage = (e) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      if (file.size > 5 * 1024 * 1024) {
+        alert('Image size should be less than 5MB')
+        return
+      }
+      const reader = new FileReader()
+      reader.onload = (event) => {
+        const result = event.target?.result
+        if (result && typeof result === 'string') {
+          changeBackground(result)
+          setShowBgCustomizer(false)
+        }
+      }
+      reader.onerror = () => {
+        alert('Failed to read image file')
+      }
+      reader.readAsDataURL(file)
+    }
+  }
+
+  useEffect(() => {
+    // Apply saved background on load
+    if (backgroundImage) {
+      changeBackground(backgroundImage)
+    }
+  }, [])
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -494,6 +546,77 @@ function App() {
             </div>
             )}
           </div>
+        )}
+
+        {/* Background Customizer Corner Button */}
+        <button 
+          className="bg-customizer-tab"
+          onClick={() => setShowBgCustomizer(!showBgCustomizer)}
+          title="Customize Background"
+        >
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+            <circle cx="8.5" cy="8.5" r="1.5"/>
+            <polyline points="21 15 16 10 5 21"/>
+          </svg>
+        </button>
+        
+        {/* Background Customizer Overlay */}
+        {showBgCustomizer && (
+          <>
+            <div className="bg-overlay" onClick={() => setShowBgCustomizer(false)}></div>
+            <div className="bg-customizer-panel">
+              <div className="bg-panel-header">
+                <h3>Customize Background</h3>
+                <button onClick={() => setShowBgCustomizer(false)} className="close-panel-btn">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <line x1="18" y1="6" x2="6" y2="18"/>
+                    <line x1="6" y1="6" x2="18" y2="18"/>
+                  </svg>
+                </button>
+              </div>
+              <div className="bg-panel-content">
+                <div className="bg-section">
+                  <h4>Preset Backgrounds</h4>
+                  <div className="bg-presets-grid">
+                    {presetBackgrounds.map((bg) => (
+                      <button
+                        key={bg.name}
+                        onClick={() => changeBackground(bg.url)}
+                        className={`bg-preset-card ${backgroundImage === bg.url ? 'active' : ''}`}
+                      >
+                        <div 
+                          className="bg-preview" 
+                          style={{
+                            backgroundImage: bg.url ? `url('${bg.url}')` : 'linear-gradient(135deg, #000000 0%, #1a1a1a 50%, #0a0a0a 100%)'
+                          }}
+                        ></div>
+                        <span className="bg-preset-name">{bg.name}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="bg-section">
+                  <h4>Custom Image</h4>
+                  <label htmlFor="custom-bg" className="custom-bg-upload">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                      <polyline points="17 8 12 3 7 8"/>
+                      <line x1="12" y1="3" x2="12" y2="15"/>
+                    </svg>
+                    <span>Upload Image</span>
+                  </label>
+                  <input
+                    id="custom-bg"
+                    type="file"
+                    accept="image/*"
+                    onChange={handleCustomImage}
+                    style={{ display: 'none' }}
+                  />
+                </div>
+              </div>
+            </div>
+          </>
         )}
       </div>
     )
