@@ -95,6 +95,7 @@ function App() {
   const [upcomingAssignments, setUpcomingAssignments] = useState([])
   const [loadingUpcoming, setLoadingUpcoming] = useState(false)
   const [hypotheticalAssignments, setHypotheticalAssignments] = useState({})
+  const [showSlowLoadingMessage, setShowSlowLoadingMessage] = useState(false)
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -142,6 +143,12 @@ function App() {
     e.preventDefault()
     setLoading(true)
     setError('')
+    setShowSlowLoadingMessage(false)
+    
+    // Show slow loading message after 3 seconds
+    const slowLoadingTimer = setTimeout(() => {
+      setShowSlowLoadingMessage(true)
+    }, 3000)
     
     try {
       const response = await fetch('/api/courses', {
@@ -201,7 +208,9 @@ function App() {
     } catch (err) {
       setError(err.message)
     } finally {
+      clearTimeout(slowLoadingTimer)
       setLoading(false)
+      setShowSlowLoadingMessage(false)
     }
   }
 
@@ -391,6 +400,11 @@ function App() {
               {loading ? 'Connecting...' : 'Connect to Canvas'}
             </button>
           </form>
+          {showSlowLoadingMessage && (
+            <div className="slow-loading-message">
+              The server may be waking up from inactivity. This can slow down the first load.
+            </div>
+          )}
           {error && <div className="error">{error}</div>}
         </div>
       </div>
