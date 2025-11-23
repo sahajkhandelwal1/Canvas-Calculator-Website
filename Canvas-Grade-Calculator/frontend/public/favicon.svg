@@ -1,11 +1,12 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
   <text 
     x="50" 
-    y="75" 
-    font-family="'Futura', 'Century Gothic', 'Avenir', sans-serif" 
-    font-size="85" 
-    fill="#000000" 
+    y="60" 
+    font-family="'Science Gothic', 'Eurostile', 'Microgramma', 'Bank Gothic', sans-serif" 
+    font-size="70" 
+    fill="#20315dff" 
     text-anchor="middle"
-    font-weight="900"
-    letter-spacing="-2">C</text>
+    dominant-baseline="middle"
+    font-weight="bold"
+    letter-spacing="-2">C+</text>
 </svg>
