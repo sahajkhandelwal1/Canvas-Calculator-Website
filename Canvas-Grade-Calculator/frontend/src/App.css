@@ -733,3 +733,78 @@
   pointer-events: auto;
   z-index: 1;
 }
+
+.assignment-item.hypothetical {
+  background: rgba(99, 102, 241, 0.08);
+  border: 1px dashed rgba(99, 102, 241, 0.4);
+}
+
+.hypo-name-input {
+  flex: 1;
+  padding: 0.4rem;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
+  color: #fff;
+  font-size: 0.9rem;
+}
+
+.hypo-name-input::placeholder {
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.hypo-scores {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.hypo-score-input {
+  width: 70px;
+  padding: 0.4rem;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
+  color: #fff;
+  font-size: 0.9rem;
+}
+
+.hypo-score-input::placeholder {
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.remove-hypo-btn {
+  padding: 0.4rem 0.8rem;
+  background: rgba(248, 113, 113, 0.15);
+  border: 1px solid rgba(248, 113, 113, 0.3);
+  border-radius: 6px;
+  color: #f87171;
+  cursor: pointer;
+  font-size: 1rem;
+  font-weight: bold;
+  transition: all 0.2s ease;
+}
+
+.remove-hypo-btn:hover {
+  background: rgba(248, 113, 113, 0.25);
+  border-color: rgba(248, 113, 113, 0.5);
+}
+
+.add-hypo-btn {
+  width: 100%;
+  padding: 0.75rem;
+  margin-top: 0.75rem;
+  background: rgba(99, 102, 241, 0.1);
+  border: 1px dashed rgba(99, 102, 241, 0.4);
+  border-radius: 8px;
+  color: #818cf8;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 600;
+  transition: all 0.2s ease;
+}
+
+.add-hypo-btn:hover {
+  background: rgba(99, 102, 241, 0.15);
+  border-color: rgba(99, 102, 241, 0.6);
+}

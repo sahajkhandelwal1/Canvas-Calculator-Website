@@ -94,6 +94,7 @@ function App() {
   const [error, setError] = useState('')
   const [upcomingAssignments, setUpcomingAssignments] = useState([])
   const [loadingUpcoming, setLoadingUpcoming] = useState(false)
+  const [hypotheticalAssignments, setHypotheticalAssignments] = useState({})
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -209,6 +210,7 @@ function App() {
     setError('')
     setModifications({})
     setProjectedGrade(null)
+    setHypotheticalAssignments({})
     setSelectedCourse({ id: courseId, name: 'Loading...', loading: true })
     
     try {
@@ -271,14 +273,56 @@ function App() {
     setModifications(newMods)
   }
 
+  const addHypotheticalAssignment = (groupId) => {
+    const newId = `hypo-${Date.now()}`
+    setHypotheticalAssignments(prev => ({
+      ...prev,
+      [groupId]: [...(prev[groupId] || []), { id: newId, name: '', score: '', pointsPossible: '' }]
+    }))
+  }
+
+  const updateHypotheticalAssignment = (groupId, assignmentId, field, value) => {
+    setHypotheticalAssignments(prev => ({
+      ...prev,
+      [groupId]: prev[groupId].map(a => 
+        a.id === assignmentId ? { ...a, [field]: value } : a
+      )
+    }))
+  }
+
+  const removeHypotheticalAssignment = (groupId, assignmentId) => {
+    setHypotheticalAssignments(prev => ({
+      ...prev,
+      [groupId]: prev[groupId].filter(a => a.id !== assignmentId)
+    }))
+  }
+
   const calculateProjectedGrade = async () => {
     setLoading(true)
     try {
+      // Merge hypothetical assignments with real assignments
+      const allAssignments = [...assignments]
+      
+      Object.entries(hypotheticalAssignments).forEach(([groupId, hypoAssignments]) => {
+        hypoAssignments.forEach(hypo => {
+          if (hypo.score !== '' && hypo.pointsPossible !== '') {
+            allAssignments.push({
+              assignment: {
+                assignment_group_id: parseInt(groupId),
+                points_possible: parseFloat(hypo.pointsPossible),
+                name: hypo.name || 'Hypothetical Assignment'
+              },
+              score: parseFloat(hypo.score)
+            })
+          }
+        })
+      })
+      
       const response = await fetch('/api/calculate-grade', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          assignments,
+          assignments: allAssignments,
           assignment_groups: assignmentGroups,
           modifications
         })
@@ -627,6 +671,54 @@ function App() {
                     </div>
                   )
                 })}
+                
+                {/* Hypothetical Assignments */}
+                {hypotheticalAssignments[groupId]?.map((hypo) => (
+                  <div key={hypo.id} className="assignment-item hypothetical">
+                    <div className="assignment-info">
+                      <input
+                        type="text"
+                        placeholder="Assignment name (optional)"
+                        value={hypo.name}
+                        onChange={(e) => updateHypotheticalAssignment(groupId, hypo.id, 'name', e.target.value)}
+                        className="hypo-name-input"
+                      />
+                      <div className="hypo-scores">
+                        <input
+                          type="number"
+                          step="0.01"
+                          placeholder="Score"
+                          value={hypo.score}
+                          onChange={(e) => updateHypotheticalAssignment(groupId, hypo.id, 'score', e.target.value)}
+                          className="hypo-score-input"
+                        />
+                        <span>/</span>
+                        <input
+                          type="number"
+                          step="0.01"
+                          placeholder="Total"
+                          value={hypo.pointsPossible}
+                          onChange={(e) => updateHypotheticalAssignment(groupId, hypo.id, 'pointsPossible', e.target.value)}
+                          className="hypo-score-input"
+                        />
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => removeHypotheticalAssignment(groupId, hypo.id)}
+                      className="remove-hypo-btn"
+                      title="Remove"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+                
+                <button
+                  onClick={() => addHypotheticalAssignment(groupId)}
+                  className="add-hypo-btn"
+                >
+                  + Add Hypothetical Assignment
+                </button>
               </div>
             </div>
           )
@@ -634,7 +726,7 @@ function App() {
 
         <button 
           onClick={calculateProjectedGrade} 
-          disabled={loading || Object.keys(modifications).length === 0}
+          disabled={loading || (Object.keys(modifications).length === 0 && Object.keys(hypotheticalAssignments).length === 0)}
           className="calculate-btn"
         >
           {loading ? 'Calculating...' : 'Calculate Projected Grade'}
