@@ -88,6 +88,7 @@ function App() {
   const [assignments, setAssignments] = useState([])
   const [assignmentGroups, setAssignmentGroups] = useState([])
   const [modifications, setModifications] = useState({})
+  const [droppedAssignments, setDroppedAssignments] = useState({})
   const [currentGrade, setCurrentGrade] = useState(null)
   const [projectedGrade, setProjectedGrade] = useState(null)
   const [loading, setLoading] = useState(false)
@@ -270,6 +271,7 @@ function App() {
     setLoading(true)
     setError('')
     setModifications({})
+    setDroppedAssignments({})
     setProjectedGrade(null)
     setHypotheticalAssignments({})
     setSelectedCourse({ id: courseId, name: 'Loading...', loading: true })
@@ -334,6 +336,18 @@ function App() {
     setModifications(newMods)
   }
 
+  const toggleDropAssignment = (index) => {
+    setDroppedAssignments(prev => {
+      const newDropped = { ...prev }
+      if (newDropped[index]) {
+        delete newDropped[index]
+      } else {
+        newDropped[index] = true
+      }
+      return newDropped
+    })
+  }
+
   const addHypotheticalAssignment = (groupId) => {
     const newId = `hypo-${Date.now()}`
     setHypotheticalAssignments(prev => ({
@@ -361,8 +375,9 @@ function App() {
   const calculateProjectedGrade = async () => {
     setLoading(true)
     try {
-      // Merge hypothetical assignments with real assignments
-      const allAssignments = [...assignments]
+      // Filter out dropped assignments and merge hypothetical assignments
+      const filteredAssignments = assignments.filter((_, index) => !droppedAssignments[index])
+      const allAssignments = [...filteredAssignments]
       
       Object.entries(hypotheticalAssignments).forEach(([groupId, hypoAssignments]) => {
         hypoAssignments.forEach(hypo => {
@@ -775,9 +790,18 @@ function App() {
                   return (
                     <div 
                       key={index} 
-                      className={`assignment-item ${assignmentUrl ? 'clickable' : ''}`}
+                      className={`assignment-item ${assignmentUrl ? 'clickable' : ''} ${droppedAssignments[index] ? 'dropped' : ''}`}
                       onClick={handleAssignmentClick}
                     >
+                      <label className="drop-checkbox" onClick={(e) => e.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          checked={droppedAssignments[index] || false}
+                          onChange={() => toggleDropAssignment(index)}
+                          title="Drop this assignment from grade calculation"
+                        />
+                        <span className="checkbox-label">Drop</span>
+                      </label>
                       <div className="assignment-info">
                         <span className="assignment-name">
                           {assignment?.name || 'Unknown'}
@@ -804,6 +828,7 @@ function App() {
                         value={modifications[index] !== undefined ? modifications[index] : ''}
                         onChange={(e) => handleModification(index, e.target.value)}
                         className="score-input"
+                        disabled={droppedAssignments[index]}
                       />
                     </div>
                   )
@@ -863,7 +888,7 @@ function App() {
 
         <button 
           onClick={calculateProjectedGrade} 
-          disabled={loading || (Object.keys(modifications).length === 0 && Object.keys(hypotheticalAssignments).length === 0)}
+          disabled={loading || (Object.keys(modifications).length === 0 && Object.keys(hypotheticalAssignments).length === 0 && Object.keys(droppedAssignments).length === 0)}
           className="calculate-btn"
         >
           {loading ? 'Calculating...' : 'Calculate Projected Grade'}
