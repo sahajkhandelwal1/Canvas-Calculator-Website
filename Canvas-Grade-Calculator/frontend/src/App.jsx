@@ -811,9 +811,19 @@ function App() {
                           {score !== null ? (
                             <>
                               {percentage !== null && (
-                                <span className="assignment-percentage">({percentage}%) </span>
+                                <span className="assignment-percentage">
+                                  ({percentage}%)
+                                  {modifications[index] !== undefined && pointsPossible > 0 && (
+                                    <>
+                                      <span className="arrow-small"> → </span>
+                                      <span className={`what-if-percentage ${parseFloat(((modifications[index] / pointsPossible) * 100).toFixed(2)) >= parseFloat(percentage) ? 'positive' : 'negative'}`}>
+                                        ({((modifications[index] / pointsPossible) * 100).toFixed(2)}%)
+                                      </span>
+                                    </>
+                                  )}
+                                </span>
                               )}
-                              {score} / {pointsPossible}
+                              {' '}{score} / {pointsPossible}
                             </>
                           ) : (
                             `Not graded / ${pointsPossible}`
