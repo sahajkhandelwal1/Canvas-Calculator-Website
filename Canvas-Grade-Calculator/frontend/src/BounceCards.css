@@ -1,0 +1,103 @@
+.bounceCardsContainer {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 400px;
+  height: 400px;
+  margin: 2rem auto;
+}
+
+.bounce-card {
+  position: absolute;
+  width: 200px;
+  aspect-ratio: 1;
+  border: 3px solid rgba(255, 255, 255, 0.3);
+  border-radius: 20px;
+  overflow: hidden;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  cursor: pointer;
+  transition: border-color 0.3s ease;
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(20px);
+}
+
+.bounce-card:hover {
+  border-color: rgba(99, 102, 241, 0.6);
+  z-index: 10;
+}
+
+.bounce-card.active {
+  border-color: rgba(99, 102, 241, 0.8);
+  box-shadow: 0 0 30px rgba(99, 102, 241, 0.5);
+}
+
+.bounce-card-content {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: 1rem;
+  text-align: center;
+}
+
+.bounce-card-title {
+  color: #fff;
+  font-size: 0.9rem;
+  font-weight: 600;
+  margin-bottom: 0.75rem;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.bounce-card-grade {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.bounce-card-grade .grade-letter {
+  font-size: 2.5rem;
+  font-weight: bold;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.bounce-card-grade .grade-percent {
+  font-size: 1rem;
+  color: rgba(255, 255, 255, 0.8);
+  font-weight: 500;
+}
+
+@media (max-width: 768px) {
+  .bounceCardsContainer {
+    width: 100%;
+    max-width: 350px;
+    height: 350px;
+  }
+  
+  .bounce-card {
+    width: 160px;
+  }
+  
+  .bounce-card-title {
+    font-size: 0.8rem;
+  }
+  
+  .bounce-card-grade .grade-letter {
+    font-size: 2rem;
+  }
+  
+  .bounce-card-grade .grade-percent {
+    font-size: 0.9rem;
+  }
+}

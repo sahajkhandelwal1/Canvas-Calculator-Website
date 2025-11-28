@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Analytics } from "@vercel/analytics/react"
 import CountUp from './CountUp'
+import BounceCards from './BounceCards'
 import {
   DndContext,
   closestCenter,
@@ -98,6 +99,15 @@ function App() {
   const [hypotheticalAssignments, setHypotheticalAssignments] = useState({})
   const [showSlowLoadingMessage, setShowSlowLoadingMessage] = useState(false)
   const [showBgCustomizer, setShowBgCustomizer] = useState(false)
+  const [hiddenCourses, setHiddenCourses] = useState(() => {
+    const saved = localStorage.getItem('hiddenCourses')
+    return saved ? JSON.parse(saved) : {}
+  })
+  const [showCourseManager, setShowCourseManager] = useState(false)
+  const [showBounceCards, setShowBounceCards] = useState(() => {
+    const saved = localStorage.getItem('showBounceCards')
+    return saved !== null ? JSON.parse(saved) : true // Default to true
+  })
   const [backgroundImage, setBackgroundImage] = useState(() => {
     return localStorage.getItem('backgroundImage') || 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=1920&q=80'
   })
@@ -639,6 +649,61 @@ function App() {
 
   const { grouped, groupMap } = groupedAssignments()
 
+  // Toggle bounce cards visibility
+  const toggleBounceCards = () => {
+    setShowBounceCards(prev => {
+      const newValue = !prev
+      localStorage.setItem('showBounceCards', JSON.stringify(newValue))
+      return newValue
+    })
+  }
+
+  // Toggle course visibility in bounce cards
+  const toggleCourseVisibility = (courseId) => {
+    setHiddenCourses(prev => {
+      const newHidden = { ...prev }
+      if (newHidden[courseId]) {
+        delete newHidden[courseId]
+      } else {
+        newHidden[courseId] = true
+      }
+      localStorage.setItem('hiddenCourses', JSON.stringify(newHidden))
+      return newHidden
+    })
+  }
+
+  // Prepare cards for BounceCards component - filter out hidden courses
+  const visibleCourses = courses.filter(course => !hiddenCourses[course.id])
+  const bounceCardData = visibleCourses.map(course => ({
+    id: course.id,
+    name: course.name,
+    grade: course.current_grade,
+    score: course.current_score,
+    isActive: course.id === selectedCourse?.id
+  }));
+
+  // Dynamically generate transform styles based on number of courses
+  const generateTransformStyles = (count) => {
+    if (count === 0) return [];
+    if (count === 1) return ['rotate(0deg)'];
+    
+    const styles = [];
+    const spacing = 90; // pixels between cards
+    const maxRotation = 3; // degrees - reduced for more subtle curve
+    const centerIndex = (count - 1) / 2;
+    
+    for (let i = 0; i < count; i++) {
+      const offset = i - centerIndex;
+      const translateX = offset * spacing;
+      const rotation = (offset / centerIndex) * maxRotation;
+      styles.push(`rotate(${rotation.toFixed(1)}deg) translate(${translateX}px)`);
+    }
+    
+    return styles;
+  };
+
+  const transformStyles = generateTransformStyles(bounceCardData.length);
+
   return (
     <div className="container">
       <div className="header">
@@ -646,7 +711,89 @@ function App() {
           ← Back to Courses
         </button>
         <h1>{selectedCourse.name}</h1>
+        {courses.length > 1 && (
+          <>
+            <button 
+              onClick={toggleBounceCards} 
+              className={`toggle-cards-btn ${showBounceCards ? 'active' : ''}`}
+              title={showBounceCards ? 'Hide course cards' : 'Show course cards'}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <rect x="3" y="3" width="7" height="7" rx="1"/>
+                <rect x="14" y="3" width="7" height="7" rx="1"/>
+                <rect x="14" y="14" width="7" height="7" rx="1"/>
+                <rect x="3" y="14" width="7" height="7" rx="1"/>
+              </svg>
+              <span>{showBounceCards ? 'Hide' : 'Show'} Cards</span>
+            </button>
+            {showBounceCards && (
+              <button onClick={() => setShowCourseManager(!showCourseManager)} className="manage-courses-btn">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <circle cx="12" cy="12" r="1"/>
+                  <circle cx="12" cy="5" r="1"/>
+                  <circle cx="12" cy="19" r="1"/>
+                </svg>
+                <span>Manage</span>
+              </button>
+            )}
+          </>
+        )}
       </div>
+
+      {/* Course Manager Modal */}
+      {showCourseManager && (
+        <>
+          <div className="bg-overlay" onClick={() => setShowCourseManager(false)}></div>
+          <div className="course-manager-modal">
+            <div className="modal-header">
+              <h3>Manage Course Cards</h3>
+              <button onClick={() => setShowCourseManager(false)} className="close-modal-btn">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <line x1="18" y1="6" x2="6" y2="18"/>
+                  <line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+              </button>
+            </div>
+            <div className="modal-content">
+              <p className="modal-hint">Select which courses are shown in the cards</p>
+              <div className="course-list">
+                {courses.map(course => (
+                  <label key={course.id} className="course-toggle">
+                    <input
+                      type="checkbox"
+                      checked={!hiddenCourses[course.id]}
+                      onChange={() => toggleCourseVisibility(course.id)}
+                    />
+                    <span className="course-toggle-name">{course.name}</span>
+                    {course.current_grade && (
+                      <span className="course-toggle-grade">{course.current_grade} ({course.current_score}%)</span>
+                    )}
+                  </label>
+                ))}
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* BounceCards for switching between courses */}
+      {!loading && showBounceCards && bounceCardData.length > 1 && (
+        <BounceCards
+          cards={bounceCardData}
+          containerWidth={Math.min(800, 200 + bounceCardData.length * 90)}
+          containerHeight={280}
+          animationDelay={0.3}
+          animationStagger={0.08}
+          easeType="elastic.out(1, 0.5)"
+          transformStyles={transformStyles}
+          enableHover={true}
+          onCardClick={(card) => {
+            if (card.id !== selectedCourse?.id) {
+              loadCourse(card.id);
+            }
+          }}
+        />
+      )}
 
       {loading && (
         <div className="loading-overlay">
