@@ -98,6 +98,7 @@ function App() {
   const [loadingUpcoming, setLoadingUpcoming] = useState(false)
   const [hypotheticalAssignments, setHypotheticalAssignments] = useState({})
   const [showSlowLoadingMessage, setShowSlowLoadingMessage] = useState(false)
+  const [loadingProgress, setLoadingProgress] = useState(0)
   const [showBgCustomizer, setShowBgCustomizer] = useState(false)
   const [hiddenCourses, setHiddenCourses] = useState(() => {
     const saved = localStorage.getItem('hiddenCourses')
@@ -207,6 +208,15 @@ function App() {
     setLoading(true)
     setError('')
     setShowSlowLoadingMessage(false)
+    setLoadingProgress(0)
+    
+    // Simulate progress bar
+    const progressInterval = setInterval(() => {
+      setLoadingProgress(prev => {
+        if (prev >= 90) return prev // Cap at 90% until actual completion
+        return prev + Math.random() * 15
+      })
+    }, 300)
     
     // Show slow loading message after 3 seconds
     const slowLoadingTimer = setTimeout(() => {
@@ -214,15 +224,19 @@ function App() {
     }, 3000)
     
     try {
+      setLoadingProgress(20) // Initial progress
       const response = await fetch('/api/courses', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token, canvasUrl })
       })
       
+      setLoadingProgress(60) // After fetch
+      
       if (!response.ok) throw new Error('Invalid token or network error')
       
       const data = await response.json()
+      setLoadingProgress(80) // After parsing
       
       // Load saved course order
       const savedOrder = localStorage.getItem('courseOrder')
@@ -271,9 +285,14 @@ function App() {
     } catch (err) {
       setError(err.message)
     } finally {
+      clearInterval(progressInterval)
       clearTimeout(slowLoadingTimer)
-      setLoading(false)
-      setShowSlowLoadingMessage(false)
+      setLoadingProgress(100) // Complete the progress bar
+      setTimeout(() => {
+        setLoading(false)
+        setShowSlowLoadingMessage(false)
+        setLoadingProgress(0)
+      }, 300) // Brief delay to show 100%
     }
   }
 
@@ -477,6 +496,22 @@ function App() {
               {loading ? 'Connecting...' : 'Connect to Canvas'}
             </button>
           </form>
+          {loading && (
+            <div className="progress-container">
+              <div className="progress-bar">
+                <div 
+                  className="progress-fill" 
+                  style={{ width: `${loadingProgress}%` }}
+                ></div>
+              </div>
+              <div className="progress-text">
+                {loadingProgress < 30 && 'Connecting to Canvas...'}
+                {loadingProgress >= 30 && loadingProgress < 70 && 'Loading your courses...'}
+                {loadingProgress >= 70 && loadingProgress < 100 && 'Almost there...'}
+                {loadingProgress >= 100 && 'Complete!'}
+              </div>
+            </div>
+          )}
           {showSlowLoadingMessage && (
             <div className="slow-loading-message">
               The server may be waking up from inactivity. This can slow down the first load.
