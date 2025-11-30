@@ -210,13 +210,13 @@ function App() {
     setShowSlowLoadingMessage(false)
     setLoadingProgress(0)
     
-    // Simulate progress bar
+    // Simulate progress bar - slower and more gradual
     const progressInterval = setInterval(() => {
       setLoadingProgress(prev => {
-        if (prev >= 90) return prev // Cap at 90% until actual completion
-        return prev + Math.random() * 15
+        if (prev >= 70) return prev // Cap at 70% until actual completion
+        return prev + Math.random() * 5 // Slower increments
       })
-    }, 300)
+    }, 500) // Slower interval
     
     // Show slow loading message after 3 seconds
     const slowLoadingTimer = setTimeout(() => {
@@ -224,19 +224,19 @@ function App() {
     }, 3000)
     
     try {
-      setLoadingProgress(20) // Initial progress
+      setLoadingProgress(10) // Initial progress
       const response = await fetch('/api/courses', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token, canvasUrl })
       })
       
-      setLoadingProgress(60) // After fetch
+      setLoadingProgress(75) // After fetch completes
       
       if (!response.ok) throw new Error('Invalid token or network error')
       
       const data = await response.json()
-      setLoadingProgress(80) // After parsing
+      setLoadingProgress(90) // After parsing
       
       // Load saved course order
       const savedOrder = localStorage.getItem('courseOrder')
@@ -505,9 +505,9 @@ function App() {
                 ></div>
               </div>
               <div className="progress-text">
-                {loadingProgress < 30 && 'Connecting to Canvas...'}
-                {loadingProgress >= 30 && loadingProgress < 70 && 'Loading your courses...'}
-                {loadingProgress >= 70 && loadingProgress < 100 && 'Almost there...'}
+                {loadingProgress < 50 && 'Connecting to Canvas...'}
+                {loadingProgress >= 50 && loadingProgress < 80 && 'Loading your courses...'}
+                {loadingProgress >= 80 && loadingProgress < 100 && 'Almost there...'}
                 {loadingProgress >= 100 && 'Complete!'}
               </div>
             </div>
