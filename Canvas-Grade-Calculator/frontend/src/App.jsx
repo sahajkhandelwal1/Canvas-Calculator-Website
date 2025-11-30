@@ -99,6 +99,7 @@ function App() {
   const [hypotheticalAssignments, setHypotheticalAssignments] = useState({})
   const [showSlowLoadingMessage, setShowSlowLoadingMessage] = useState(false)
   const [loadingProgress, setLoadingProgress] = useState(0)
+  const [isInitialLoad, setIsInitialLoad] = useState(true)
   const [showBgCustomizer, setShowBgCustomizer] = useState(false)
   const [hiddenCourses, setHiddenCourses] = useState(() => {
     const saved = localStorage.getItem('hiddenCourses')
@@ -193,11 +194,41 @@ function App() {
     }
   }
 
+  // Handle browser back/forward buttons
+  useEffect(() => {
+    const handlePopState = (event) => {
+      if (event.state) {
+        if (event.state.courseId) {
+          // Navigate to specific course (skip adding to history)
+          loadCourse(event.state.courseId, true)
+        } else if (event.state.page === 'courses') {
+          // Navigate back to courses list
+          setSelectedCourse(null)
+        }
+      }
+    }
+
+    window.addEventListener('popstate', handlePopState)
+    return () => window.removeEventListener('popstate', handlePopState)
+  }, [courses])
+
   // Auto-login if token exists
   useEffect(() => {
     const savedToken = localStorage.getItem('canvasToken')
-    if (savedToken && !isAuthenticated) {
+    const savedUrl = localStorage.getItem('canvasUrl')
+    const hasBeenAuthenticated = sessionStorage.getItem('hasBeenAuthenticated')
+    
+    if (savedToken && savedUrl && !isAuthenticated) {
       setToken(savedToken)
+      setCanvasUrl(savedUrl)
+      
+      // If user has been authenticated this session (refresh), skip loading screen
+      if (hasBeenAuthenticated) {
+        setIsInitialLoad(false)
+      } else {
+        setLoading(true) // Show loading for first visit
+      }
+      
       // Trigger login automatically
       handleLogin({ preventDefault: () => {} })
     }
@@ -210,11 +241,13 @@ function App() {
     setShowSlowLoadingMessage(false)
     setLoadingProgress(0)
     
-    // Simulate progress bar - slower and more gradual
+    // Simulate progress bar - continues slowly even when waiting
     const progressInterval = setInterval(() => {
       setLoadingProgress(prev => {
-        if (prev >= 70) return prev // Cap at 70% until actual completion
-        return prev + Math.random() * 5 // Slower increments
+        if (prev >= 95) return prev // Cap at 95% until actual completion
+        // Slow down as we get closer to the cap
+        const increment = prev < 60 ? Math.random() * 5 : Math.random() * 2
+        return prev + increment
       })
     }, 500) // Slower interval
     
@@ -262,6 +295,12 @@ function App() {
       localStorage.setItem('canvasToken', token)
       localStorage.setItem('canvasUrl', canvasUrl)
       
+      // Mark that user has been authenticated this session (for refresh detection)
+      sessionStorage.setItem('hasBeenAuthenticated', 'true')
+      
+      // Set initial history state for courses page
+      window.history.replaceState({ page: 'courses' }, '', '#courses')
+      
       // Fetch upcoming assignments in background
       setLoadingUpcoming(true)
       fetch('/api/upcoming-assignments', {
@@ -296,7 +335,7 @@ function App() {
     }
   }
 
-  const loadCourse = async (courseId) => {
+  const loadCourse = async (courseId, skipHistory = false) => {
     setLoading(true)
     setError('')
     setModifications({})
@@ -304,6 +343,15 @@ function App() {
     setProjectedGrade(null)
     setHypotheticalAssignments({})
     setSelectedCourse({ id: courseId, name: 'Loading...', loading: true })
+    
+    // Push to browser history (unless navigating via back/forward)
+    if (!skipHistory) {
+      window.history.pushState(
+        { courseId, page: 'course' },
+        '',
+        `#course/${courseId}`
+      )
+    }
     
     try {
       const [assignmentsRes, groupsRes] = await Promise.all([
@@ -463,6 +511,44 @@ function App() {
   }
 
   if (!isAuthenticated) {
+    // Show loading screen only on initial load (not on refresh)
+    if (loading && localStorage.getItem('canvasToken') && isInitialLoad) {
+      return (
+        <div className="container">
+          <div className="auto-login-loading">
+            <div className="loading-spinner"></div>
+            <h2>Welcome back!</h2>
+            <p>Loading your Canvas data...</p>
+            <div className="progress-container">
+              <div className="progress-bar">
+                <div 
+                  className="progress-fill" 
+                  style={{ width: `${loadingProgress}%` }}
+                ></div>
+              </div>
+              <div className="progress-text">
+                {loadingProgress < 40 && 'Connecting to Canvas...'}
+                {loadingProgress >= 40 && loadingProgress < 75 && 'Loading your courses...'}
+                {loadingProgress >= 75 && loadingProgress < 95 && 'Processing data...'}
+                {loadingProgress >= 95 && loadingProgress < 100 && 'Almost there...'}
+                {loadingProgress >= 100 && 'Complete!'}
+              </div>
+            </div>
+            {showSlowLoadingMessage && (
+              <div className="slow-loading-message">
+                The server may be waking up from inactivity. This can slow down the first load.
+              </div>
+            )}
+          </div>
+        </div>
+      )
+    }
+    
+    // On refresh, show nothing (blank screen) while loading
+    if (loading && localStorage.getItem('canvasToken') && !isInitialLoad) {
+      return null
+    }
+
     return (
       <div className="container">
         <div className="login-card">
@@ -505,9 +591,10 @@ function App() {
                 ></div>
               </div>
               <div className="progress-text">
-                {loadingProgress < 50 && 'Connecting to Canvas...'}
-                {loadingProgress >= 50 && loadingProgress < 80 && 'Loading your courses...'}
-                {loadingProgress >= 80 && loadingProgress < 100 && 'Almost there...'}
+                {loadingProgress < 40 && 'Connecting to Canvas...'}
+                {loadingProgress >= 40 && loadingProgress < 75 && 'Loading your courses...'}
+                {loadingProgress >= 75 && loadingProgress < 95 && 'Processing data...'}
+                {loadingProgress >= 95 && loadingProgress < 100 && 'Almost there...'}
                 {loadingProgress >= 100 && 'Complete!'}
               </div>
             </div>
@@ -742,7 +829,10 @@ function App() {
   return (
     <div className="container">
       <div className="header">
-        <button onClick={() => setSelectedCourse(null)} className="back-btn">
+        <button onClick={() => {
+          setSelectedCourse(null)
+          window.history.pushState({ page: 'courses' }, '', '#courses')
+        }} className="back-btn">
           ← Back to Courses
         </button>
         <h1>{selectedCourse.name}</h1>
