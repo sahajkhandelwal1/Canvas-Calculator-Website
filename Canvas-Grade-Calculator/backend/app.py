@@ -1,6 +1,10 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import requests
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+import os
 
 app = Flask(__name__)
 CORS(app)
@@ -341,7 +345,72 @@ def calculate_grade_logic(assignments, assignment_groups, modifications=None):
     
     return weighted_grade
 
+@app.route('/api/feedback', methods=['POST'])
+def send_feedback():
+    """Send feedback email using a simple HTTP service"""
+    try:
+        feedback_text = request.json.get('feedback', '')
+        user_email = request.json.get('email', 'anonymous')
+        
+        if not feedback_text:
+            return jsonify({'error': 'Feedback text required'}), 400
+        
+        # Log feedback to console (IMPORTANT - CHECK YOUR TERMINAL!)
+        print("\n" + "="*60)
+        print("🎉 NEW FEEDBACK RECEIVED!")
+        print("="*60)
+        print(f"From: {user_email}")
+        print(f"Message:\n{feedback_text}")
+        print("="*60 + "\n")
+        
+        # Save to file as backup
+        from datetime import datetime
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        try:
+            with open('feedback.log', 'a', encoding='utf-8') as f:
+                f.write(f"\n{'='*60}\n")
+                f.write(f"Timestamp: {timestamp}\n")
+                f.write(f"From: {user_email}\n")
+                f.write(f"Message:\n{feedback_text}\n")
+                f.write(f"{'='*60}\n")
+            print("✅ Feedback saved to feedback.log")
+        except Exception as file_error:
+            print(f"⚠️  Could not save to file: {file_error}")
+        
+        # Use a simple email service (FormSubmit.co - no signup required)
+        # This sends the email without needing SMTP credentials
+        email_data = {
+            'name': 'Canvas Plus User',
+            'email': user_email,
+            'message': feedback_text,
+            '_subject': 'Canvas Plus Feedback',
+            '_captcha': 'false',
+            '_template': 'table'
+        }
+        
+        # Send to FormSubmit (free service)
+        print("📧 Attempting to send email via FormSubmit...")
+        response = requests.post(
+            'https://formsubmit.co/ajax/sahajkhandelwal2@gmail.com',
+            json=email_data,
+            headers={'Content-Type': 'application/json'},
+            timeout=10
+        )
+        
+        print(f"📬 FormSubmit response status: {response.status_code}")
+        print(f"📬 FormSubmit response: {response.text}")
+        
+        if response.status_code == 200:
+            print("✅ Email sent successfully via FormSubmit!")
+            return jsonify({'success': True, 'message': 'Feedback sent successfully'})
+        else:
+            print(f"⚠️  FormSubmit returned status {response.status_code}")
+            return jsonify({'error': 'Failed to send feedback'}), 500
+            
+    except Exception as e:
+        print(f"❌ Error sending feedback: {e}")
+        return jsonify({'error': str(e)}), 500
+
 if __name__ == '__main__':
-    import os
     port = int(os.environ.get('PORT', 5001))
     app.run(debug=False, host='0.0.0.0', port=port)

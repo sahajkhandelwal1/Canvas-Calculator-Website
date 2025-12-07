@@ -100,6 +100,9 @@ function App() {
   const [showSlowLoadingMessage, setShowSlowLoadingMessage] = useState(false)
   const [loadingProgress, setLoadingProgress] = useState(0)
   const [isInitialLoad, setIsInitialLoad] = useState(true)
+  const [showFeedback, setShowFeedback] = useState(false)
+  const [feedbackText, setFeedbackText] = useState('')
+  const [feedbackSubmitted, setFeedbackSubmitted] = useState(false)
   const [showBgCustomizer, setShowBgCustomizer] = useState(false)
   const [hiddenCourses, setHiddenCourses] = useState(() => {
     const saved = localStorage.getItem('hiddenCourses')
@@ -924,8 +927,102 @@ function App() {
         <div className="loading-overlay">
           <div className="loading-spinner"></div>
           <div className="loading-text">Loading course data...</div>
-          <div className="loading-watermark">Made by Sahaj Khandelwal</div>
+          <div className="loading-watermark">
+            Made by Sahaj Khandelwal
+            <span className="watermark-separator">•</span>
+            <button onClick={() => setShowFeedback(true)} className="feedback-link">
+              Send Feedback
+            </button>
+          </div>
         </div>
+      )}
+
+      {/* Feedback Modal */}
+      {showFeedback && (
+        <>
+          <div className="bg-overlay" onClick={() => setShowFeedback(false)}></div>
+          <div className="feedback-modal">
+            <div className="modal-header">
+              <h3>Send Feedback</h3>
+              <button onClick={() => setShowFeedback(false)} className="close-modal-btn">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <line x1="18" y1="6" x2="6" y2="18"/>
+                  <line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+              </button>
+            </div>
+            <div className="modal-content">
+              {!feedbackSubmitted ? (
+                <>
+                  <p className="modal-hint">
+                    Have a suggestion, found a bug, or just want to say hi? Let me know!
+                  </p>
+                  <textarea
+                    className="feedback-textarea"
+                    placeholder="Your feedback here..."
+                    value={feedbackText}
+                    onChange={(e) => setFeedbackText(e.target.value)}
+                    rows={6}
+                  />
+                  <div className="feedback-actions">
+                    <button 
+                      onClick={() => {
+                        setShowFeedback(false)
+                        setFeedbackText('')
+                      }} 
+                      className="cancel-btn"
+                    >
+                      Cancel
+                    </button>
+                    <button 
+                      onClick={async () => {
+                        if (feedbackText.trim()) {
+                          try {
+                            const response = await fetch('/api/feedback', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ 
+                                feedback: feedbackText,
+                                email: 'anonymous'
+                              })
+                            })
+                            
+                            if (response.ok) {
+                              setFeedbackSubmitted(true)
+                              setTimeout(() => {
+                                setShowFeedback(false)
+                                setFeedbackSubmitted(false)
+                                setFeedbackText('')
+                              }, 2000)
+                            } else {
+                              alert('Failed to send feedback. Please try again.')
+                            }
+                          } catch (error) {
+                            console.error('Error sending feedback:', error)
+                            alert('Failed to send feedback. Please try again.')
+                          }
+                        }
+                      }}
+                      className="submit-btn"
+                      disabled={!feedbackText.trim()}
+                    >
+                      Send Feedback
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <div className="feedback-success">
+                  <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="#4ade80" strokeWidth="2">
+                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                    <polyline points="22 4 12 14.01 9 11.01"/>
+                  </svg>
+                  <h4>Thank you!</h4>
+                  <p>Your feedback has been sent.</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </>
       )}
 
       {!loading && (
