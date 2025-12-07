@@ -347,7 +347,7 @@ def calculate_grade_logic(assignments, assignment_groups, modifications=None):
 
 @app.route('/api/feedback', methods=['POST'])
 def send_feedback():
-    """Send feedback email using a simple HTTP service"""
+    """Send feedback email - saves to log file and attempts email delivery"""
     try:
         feedback_text = request.json.get('feedback', '')
         user_email = request.json.get('email', 'anonymous')
@@ -363,7 +363,7 @@ def send_feedback():
         print(f"Message:\n{feedback_text}")
         print("="*60 + "\n")
         
-        # Save to file as backup
+        # Save to file as backup (PRIMARY METHOD)
         from datetime import datetime
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         try:
@@ -377,38 +377,54 @@ def send_feedback():
         except Exception as file_error:
             print(f"⚠️  Could not save to file: {file_error}")
         
-        # Use a simple email service (FormSubmit.co - no signup required)
-        # This sends the email without needing SMTP credentials
-        email_data = {
-            'name': 'Canvas Plus User',
-            'email': user_email,
-            'message': feedback_text,
-            '_subject': 'Canvas Plus Feedback',
-            '_captcha': 'false',
-            '_template': 'table'
-        }
+        # Try to send email using Gmail SMTP
+        try:
+            print("📧 Attempting to send email via SMTP...")
+            
+            # Get SMTP credentials from environment variables
+            smtp_email = os.environ.get('SMTP_EMAIL')
+            smtp_password = os.environ.get('SMTP_PASSWORD')
+            
+            if smtp_email and smtp_password:
+                msg = MIMEMultipart()
+                msg['From'] = smtp_email
+                msg['To'] = 'sahajkhandelwal2@gmail.com'
+                msg['Subject'] = 'Canvas Plus Feedback'
+                
+                body = f"""
+New feedback received from Canvas Plus!
+
+From: {user_email}
+Timestamp: {timestamp}
+
+Message:
+{feedback_text}
+"""
+                msg.attach(MIMEText(body, 'plain'))
+                
+                # Connect to Gmail SMTP server
+                server = smtplib.SMTP('smtp.gmail.com', 587)
+                server.starttls()
+                server.login(smtp_email, smtp_password)
+                server.send_message(msg)
+                server.quit()
+                
+                print("✅ Email sent successfully via SMTP!")
+            else:
+                print("ℹ️  SMTP credentials not configured (set SMTP_EMAIL and SMTP_PASSWORD env vars)")
+                print("ℹ️  Feedback saved to log file - check feedback.log")
+        except Exception as email_error:
+            print(f"⚠️  Could not send email: {email_error}")
+            print("ℹ️  Feedback still saved to log file")
         
-        # Send to FormSubmit (free service)
-        print("📧 Attempting to send email via FormSubmit...")
-        response = requests.post(
-            'https://formsubmit.co/ajax/sahajkhandelwal2@gmail.com',
-            json=email_data,
-            headers={'Content-Type': 'application/json'},
-            timeout=10
-        )
-        
-        print(f"📬 FormSubmit response status: {response.status_code}")
-        print(f"📬 FormSubmit response: {response.text}")
-        
-        if response.status_code == 200:
-            print("✅ Email sent successfully via FormSubmit!")
-            return jsonify({'success': True, 'message': 'Feedback sent successfully'})
-        else:
-            print(f"⚠️  FormSubmit returned status {response.status_code}")
-            return jsonify({'error': 'Failed to send feedback'}), 500
+        # Always return success since we saved to log file
+        return jsonify({
+            'success': True, 
+            'message': 'Feedback received! Check the server logs or feedback.log file.'
+        })
             
     except Exception as e:
-        print(f"❌ Error sending feedback: {e}")
+        print(f"❌ Error processing feedback: {e}")
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
