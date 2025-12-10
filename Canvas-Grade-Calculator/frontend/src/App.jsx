@@ -20,7 +20,7 @@ import {
 import { CSS } from '@dnd-kit/utilities'
 import './App.css'
 
-function SortableCourseCard({ course, onClick }) {
+function SortableCourseCard({ course, onClick, displayName }) {
   const {
     attributes,
     listeners,
@@ -56,7 +56,7 @@ function SortableCourseCard({ course, onClick }) {
       className={`course-card ${isDragging ? 'dragging' : ''}`}
       onClick={handleClick}
     >
-      <h3>{course.name}</h3>
+      <h3>{displayName}</h3>
       {course.current_score !== null ? (
         <div className="grade">
           <span className="grade-letter">{course.current_grade}</span>
@@ -96,6 +96,9 @@ function App() {
   const [error, setError] = useState('')
   const [upcomingAssignments, setUpcomingAssignments] = useState([])
   const [loadingUpcoming, setLoadingUpcoming] = useState(false)
+  const [overdueAssignments, setOverdueAssignments] = useState([])
+  const [loadingOverdue, setLoadingOverdue] = useState(false)
+  const [assignmentsTab, setAssignmentsTab] = useState('upcoming')
   const [hypotheticalAssignments, setHypotheticalAssignments] = useState({})
   const [showSlowLoadingMessage, setShowSlowLoadingMessage] = useState(false)
   const [loadingProgress, setLoadingProgress] = useState(0)
@@ -116,6 +119,11 @@ function App() {
   const [backgroundImage, setBackgroundImage] = useState(() => {
     return localStorage.getItem('backgroundImage') || 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=1920&q=80'
   })
+  const [customCourseNames, setCustomCourseNames] = useState(() => {
+    const saved = localStorage.getItem('customCourseNames')
+    return saved ? JSON.parse(saved) : {}
+  })
+  const [showNameEditor, setShowNameEditor] = useState(false)
 
   const presetBackgrounds = [
     { name: 'Network', url: 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=1920&q=80' },
@@ -134,6 +142,23 @@ function App() {
     document.body.style.backgroundImage = url 
       ? `linear-gradient(135deg, rgba(0, 0, 0, 0.6) 0%, rgba(26, 26, 26, 0.65) 50%, rgba(10, 10, 10, 0.6) 100%), url('${url}')`
       : 'linear-gradient(135deg, #000000 0%, #1a1a1a 50%, #0a0a0a 100%)'
+  }
+
+  // Helper function to get display name (custom or original)
+  const getDisplayName = (course) => {
+    return customCourseNames[course.id] || course.name
+  }
+
+  // Update custom course name
+  const updateCourseName = (courseId, newName) => {
+    const updatedNames = { ...customCourseNames }
+    if (newName.trim() === '') {
+      delete updatedNames[courseId]
+    } else {
+      updatedNames[courseId] = newName.trim()
+    }
+    setCustomCourseNames(updatedNames)
+    localStorage.setItem('customCourseNames', JSON.stringify(updatedNames))
   }
 
   const handleCustomImage = (e) => {
@@ -323,6 +348,27 @@ function App() {
         .catch(err => {
           console.error('Error fetching upcoming:', err)
           setLoadingUpcoming(false)
+        })
+
+      // Fetch overdue assignments in background
+      setLoadingOverdue(true)
+      fetch('/api/overdue-assignments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token, canvasUrl })
+      })
+        .then(res => {
+          if (res.ok) return res.json()
+          throw new Error('Failed to fetch')
+        })
+        .then(data => {
+          console.log('Overdue assignments received:', data)
+          setOverdueAssignments(data || [])
+          setLoadingOverdue(false)
+        })
+        .catch(err => {
+          console.error('Error fetching overdue:', err)
+          setLoadingOverdue(false)
         })
     } catch (err) {
       setError(err.message)
@@ -618,15 +664,24 @@ function App() {
       <div className="container">
         <div className="header">
           <h1>Your Courses</h1>
-          <button onClick={() => {
-            setIsAuthenticated(false)
-            localStorage.removeItem('canvasToken')
-            localStorage.removeItem('canvasUrl')
-            setToken('')
-            setCanvasUrl('cuhsd.instructure.com')
-          }} className="logout-btn">
-            Logout
-          </button>
+          <div className="header-buttons">
+            <button onClick={() => setShowNameEditor(true)} className="edit-names-btn">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                <path d="m18.5 2.5 a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+              </svg>
+              Edit Names
+            </button>
+            <button onClick={() => {
+              setIsAuthenticated(false)
+              localStorage.removeItem('canvasToken')
+              localStorage.removeItem('canvasUrl')
+              setToken('')
+              setCanvasUrl('cuhsd.instructure.com')
+            }} className="logout-btn">
+              Logout
+            </button>
+          </div>
         </div>
         <DndContext
           sensors={sensors}
@@ -642,6 +697,7 @@ function App() {
                 <SortableCourseCard
                   key={course.id}
                   course={course}
+                  displayName={getDisplayName(course)}
                   onClick={() => loadCourse(course.id)}
                 />
               ))}
@@ -649,52 +705,131 @@ function App() {
           </SortableContext>
         </DndContext>
 
-        {(loadingUpcoming || upcomingAssignments.length > 0) && (
-          <div className="upcoming-section">
-            <h2>📋 Upcoming Assignments</h2>
-            {loadingUpcoming && (
-              <div className="loading-upcoming">Loading assignments...</div>
-            )}
-            {!loadingUpcoming && upcomingAssignments.length === 0 && (
-              <div className="no-upcoming">No upcoming assignments found</div>
-            )}
-            {!loadingUpcoming && upcomingAssignments.length > 0 && (
-            <div className="upcoming-list">
-              {upcomingAssignments.map((assignment, index) => {
-                const dueDate = new Date(assignment.due_at)
-                const now = new Date()
-                const daysUntil = Math.ceil((dueDate - now) / (1000 * 60 * 60 * 24))
-                const isUrgent = daysUntil <= 2
-                
-                return (
-                  <div key={index} className={`upcoming-item ${isUrgent ? 'urgent' : ''}`}>
-                    <div className="upcoming-info">
-                      <div className="upcoming-course">{assignment.course_name}</div>
-                      <div className="upcoming-name">{assignment.assignment_name}</div>
-                      <div className="upcoming-meta">
-                        <span className="upcoming-points">{assignment.points_possible} pts</span>
-                        <span className="upcoming-due">
-                          {isUrgent ? '🔥 ' : ''}
-                          Due {dueDate.toLocaleDateString()} at {dueDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-                        </span>
-                      </div>
-                    </div>
-                    {assignment.html_url && (
-                      <a 
-                        href={assignment.html_url} 
-                        target="_blank" 
-                        rel="noopener noreferrer"
-                        className="view-btn"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        View
-                      </a>
-                    )}
-                  </div>
-                )
-              })}
+        {(loadingUpcoming || loadingOverdue || upcomingAssignments.length > 0 || overdueAssignments.length > 0) && (
+          <div className="assignments-section">
+            <div className="assignments-tabs">
+              <button 
+                className={`tab-btn ${assignmentsTab === 'upcoming' ? 'active' : ''}`}
+                onClick={() => setAssignmentsTab('upcoming')}
+              >
+                📋 Upcoming ({upcomingAssignments.length})
+              </button>
+              <button 
+                className={`tab-btn ${assignmentsTab === 'overdue' ? 'active' : ''}`}
+                onClick={() => setAssignmentsTab('overdue')}
+              >
+                ⚠️ Overdue ({overdueAssignments.length})
+              </button>
             </div>
-            )}
+
+            <div className="tab-content">
+              {assignmentsTab === 'upcoming' && (
+                <div className="upcoming-tab">
+                  {loadingUpcoming && (
+                    <div className="loading-assignments">Loading upcoming assignments...</div>
+                  )}
+                  {!loadingUpcoming && upcomingAssignments.length === 0 && (
+                    <div className="no-assignments">No upcoming assignments found</div>
+                  )}
+                  {!loadingUpcoming && upcomingAssignments.length > 0 && (
+                    <div className="assignments-list">
+                      {upcomingAssignments.map((assignment, index) => {
+                        const dueDate = new Date(assignment.due_at)
+                        const now = new Date()
+                        const daysUntil = Math.ceil((dueDate - now) / (1000 * 60 * 60 * 24))
+                        const isUrgent = daysUntil <= 2
+                        
+                        return (
+                          <div key={index} className={`assignment-item ${isUrgent ? 'urgent' : ''}`}>
+                            <div className="assignment-info">
+                              <div className="assignment-course">{assignment.course_name}</div>
+                              <div className="assignment-name">{assignment.assignment_name}</div>
+                              <div className="assignment-meta">
+                                <span className="assignment-points">{assignment.points_possible} pts</span>
+                                <span className="assignment-due">
+                                  {isUrgent ? '' : ''}
+                                  Due {dueDate.toLocaleDateString()} at {dueDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                                </span>
+                              </div>
+                            </div>
+                            {assignment.html_url && (
+                              <a 
+                                href={assignment.html_url} 
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                className="view-btn"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                View
+                              </a>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {assignmentsTab === 'overdue' && (
+                <div className="overdue-tab">
+                  {loadingOverdue && (
+                    <div className="loading-assignments">Loading overdue assignments...</div>
+                  )}
+                  {!loadingOverdue && overdueAssignments.length === 0 && (
+                    <div className="no-assignments">No overdue assignments found! 🎉</div>
+                  )}
+                  {!loadingOverdue && overdueAssignments.length > 0 && (
+                    <div className="assignments-list">
+                      {overdueAssignments.map((assignment, index) => {
+                        const dueDate = new Date(assignment.due_at)
+                        const lockDate = assignment.lock_at ? new Date(assignment.lock_at) : null
+                        const now = new Date()
+                        const isLocked = assignment.is_locked
+                        
+                        return (
+                          <div key={index} className={`assignment-item overdue ${isLocked ? 'locked' : ''}`}>
+                            <div className="assignment-info">
+                              <div className="assignment-course">{assignment.course_name}</div>
+                              <div className="assignment-name">
+                                {assignment.assignment_name}
+                                {isLocked && <span className="locked-badge">🔒 Locked</span>}
+                              </div>
+                              <div className="assignment-meta">
+                                <span className="assignment-points">{assignment.points_possible} pts</span>
+                                <span className="assignment-overdue">
+                                  Was due {dueDate.toLocaleDateString()} at {dueDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                                  <span className="days-overdue">({assignment.days_overdue} days ago)</span>
+                                </span>
+                                {lockDate && (
+                                  <span className="lock-info">
+                                    {isLocked ? 
+                                      `🔒 Locked ${lockDate.toLocaleDateString()}` : 
+                                      `⏰ Locks ${lockDate.toLocaleDateString()}`
+                                    }
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            {assignment.html_url && !isLocked && (
+                              <a 
+                                href={assignment.html_url} 
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                className="view-btn"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                View
+                              </a>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         )}
 
@@ -768,6 +903,67 @@ function App() {
             </div>
           </>
         )}
+
+        {/* Course Name Editor Modal */}
+        {showNameEditor && (
+          <>
+            <div className="bg-overlay" onClick={() => setShowNameEditor(false)}></div>
+            <div className="name-editor-modal">
+              <div className="modal-header">
+                <h3>Edit Course Names</h3>
+                <button onClick={() => setShowNameEditor(false)} className="close-modal-btn">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <line x1="18" y1="6" x2="6" y2="18"/>
+                    <line x1="6" y1="6" x2="18" y2="18"/>
+                  </svg>
+                </button>
+              </div>
+              <div className="modal-content">
+                <p className="modal-hint">
+                  Customize how your course names appear throughout the app. Leave blank to use the original Canvas name.
+                </p>
+                <div className="course-name-list">
+                  {courses.map(course => (
+                    <div key={course.id} className="course-name-item">
+                      <div className="course-info">
+                        <div className="original-name">{course.name}</div>
+                        {course.current_grade && (
+                          <div className="course-grade">{course.current_grade} ({course.current_score}%)</div>
+                        )}
+                      </div>
+                      <div className="name-input-container">
+                        <input
+                          type="text"
+                          placeholder="Custom display name (optional)"
+                          value={customCourseNames[course.id] || ''}
+                          onChange={(e) => updateCourseName(course.id, e.target.value)}
+                          className="course-name-input"
+                        />
+                        {customCourseNames[course.id] && (
+                          <button
+                            onClick={() => updateCourseName(course.id, '')}
+                            className="clear-name-btn"
+                            title="Reset to original name"
+                          >
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <line x1="18" y1="6" x2="6" y2="18"/>
+                              <line x1="6" y1="6" x2="18" y2="18"/>
+                            </svg>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="name-editor-actions">
+                  <button onClick={() => setShowNameEditor(false)} className="done-btn">
+                    Done
+                  </button>
+                </div>
+              </div>
+            </div>
+          </>
+        )}
       </div>
     )
   }
@@ -801,7 +997,7 @@ function App() {
   const visibleCourses = courses.filter(course => !hiddenCourses[course.id])
   const bounceCardData = visibleCourses.map(course => ({
     id: course.id,
-    name: course.name,
+    name: getDisplayName(course),
     grade: course.current_grade,
     score: course.current_score,
     isActive: course.id === selectedCourse?.id
@@ -838,7 +1034,7 @@ function App() {
         }} className="back-btn">
           ← Back to Courses
         </button>
-        <h1>{selectedCourse.name}</h1>
+        <h1>{getDisplayName(selectedCourse)}</h1>
         {courses.length > 1 && (
           <>
             <button 
@@ -892,7 +1088,7 @@ function App() {
                       checked={!hiddenCourses[course.id]}
                       onChange={() => toggleCourseVisibility(course.id)}
                     />
-                    <span className="course-toggle-name">{course.name}</span>
+                    <span className="course-toggle-name">{getDisplayName(course)}</span>
                     {course.current_grade && (
                       <span className="course-toggle-grade">{course.current_grade} ({course.current_score}%)</span>
                     )}

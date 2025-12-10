@@ -225,6 +225,7 @@ def get_upcoming_assignments():
                                         'course_name': course_name,
                                         'assignment_name': assignment.get('name', 'Unnamed Assignment'),
                                         'due_at': due_at,
+                                        'lock_at': assignment.get('lock_at'),
                                         'points_possible': assignment.get('points_possible', 0),
                                         'html_url': assignment.get('html_url', '')
                                     })
@@ -248,6 +249,95 @@ def get_upcoming_assignments():
         print(f"Total upcoming assignments found: {len(upcoming)}")
         
         return jsonify(upcoming[:10])  # Return top 10 upcoming
+    except requests.exceptions.RequestException as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/overdue-assignments', methods=['POST'])
+def get_overdue_assignments():
+    token = request.json.get('token')
+    canvas_url = request.json.get('canvasUrl', 'cuhsd.instructure.com')
+    
+    if not token:
+        return jsonify({'error': 'Token required'}), 400
+    
+    BASE_URL = get_base_url(canvas_url)
+    headers = make_headers(token)
+    
+    try:
+        from datetime import datetime, timedelta
+        import concurrent.futures
+        
+        # Get all active courses
+        courses_url = f"{BASE_URL}/users/{USER_ID}/courses?enrollment_state=active&per_page=100"
+        courses_response = requests.get(courses_url, headers=headers)
+        courses_response.raise_for_status()
+        courses = courses_response.json()
+        
+        print(f"Found {len(courses)} courses for overdue check")
+        
+        overdue = []
+        from datetime import timezone
+        now = datetime.now(timezone.utc)
+        
+        def fetch_course_overdue_assignments(course):
+            course_id = course.get('id')
+            course_name = course.get('name', 'Unknown Course')
+            course_overdue = []
+            
+            try:
+                # Get assignments for this course
+                assignments_url = f"{BASE_URL}/courses/{course_id}/assignments?per_page=50"
+                assignments_response = requests.get(assignments_url, headers=headers, timeout=5)
+                
+                if assignments_response.status_code == 200:
+                    assignments = assignments_response.json()
+                    
+                    for assignment in assignments:
+                        due_at = assignment.get('due_at')
+                        lock_at = assignment.get('lock_at')
+                        
+                        if due_at:
+                            try:
+                                due_date = datetime.fromisoformat(due_at.replace('Z', '+00:00'))
+                                lock_date = None
+                                if lock_at:
+                                    lock_date = datetime.fromisoformat(lock_at.replace('Z', '+00:00'))
+                                
+                                # Only include overdue assignments (past due but within last 90 days)
+                                if due_date < now and due_date > now - timedelta(days=90):
+                                    # Check if assignment is still accessible (not locked)
+                                    is_locked = lock_date and lock_date < now
+                                    
+                                    course_overdue.append({
+                                        'course_name': course_name,
+                                        'assignment_name': assignment.get('name', 'Unnamed Assignment'),
+                                        'due_at': due_at,
+                                        'lock_at': lock_at,
+                                        'is_locked': is_locked,
+                                        'points_possible': assignment.get('points_possible', 0),
+                                        'html_url': assignment.get('html_url', ''),
+                                        'days_overdue': (now - due_date).days
+                                    })
+                            except Exception as e:
+                                print(f"Error parsing overdue assignment: {e}")
+                                pass
+            except:
+                pass
+            
+            return course_overdue
+        
+        # Fetch assignments from all courses in parallel (max 5 at a time)
+        with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+            results = executor.map(fetch_course_overdue_assignments, courses)
+            for course_overdue in results:
+                overdue.extend(course_overdue)
+        
+        # Sort by due date (most recently overdue first)
+        overdue.sort(key=lambda x: datetime.fromisoformat(x['due_at'].replace('Z', '+00:00')), reverse=True)
+        
+        print(f"Total overdue assignments found: {len(overdue)}")
+        
+        return jsonify(overdue[:15])  # Return top 15 overdue
     except requests.exceptions.RequestException as e:
         return jsonify({'error': str(e)}), 500
 
