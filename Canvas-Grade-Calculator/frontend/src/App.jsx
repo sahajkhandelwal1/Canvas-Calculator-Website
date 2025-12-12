@@ -124,6 +124,7 @@ function App() {
     return saved ? JSON.parse(saved) : {}
   })
   const [showNameEditor, setShowNameEditor] = useState(false)
+  const [userInfo, setUserInfo] = useState({ name: 'Anonymous', id: null })
 
   const presetBackgrounds = [
     { name: 'Network', url: 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=1920&q=80' },
@@ -299,22 +300,29 @@ function App() {
       const data = await response.json()
       setLoadingProgress(90) // After parsing
       
+      // Handle new response format with user info
+      const courses = data.courses || data // Fallback for old format
+      const user = data.user || { name: 'Anonymous', id: null }
+      
+      // Store user info
+      setUserInfo(user)
+      
       // Load saved course order
       const savedOrder = localStorage.getItem('courseOrder')
       if (savedOrder) {
         try {
           const orderMap = JSON.parse(savedOrder)
-          const orderedCourses = [...data].sort((a, b) => {
+          const orderedCourses = [...courses].sort((a, b) => {
             const orderA = orderMap[a.id] ?? 999
             const orderB = orderMap[b.id] ?? 999
             return orderA - orderB
           })
           setCourses(orderedCourses)
         } catch {
-          setCourses(data)
+          setCourses(courses)
         }
       } else {
-        setCourses(data)
+        setCourses(courses)
       }
       
       setIsAuthenticated(true)
@@ -1179,7 +1187,8 @@ function App() {
                               headers: { 'Content-Type': 'application/json' },
                               body: JSON.stringify({ 
                                 feedback: feedbackText,
-                                email: 'anonymous'
+                                email: userInfo.name || 'Anonymous',
+                                userId: userInfo.id
                               })
                             })
                             
@@ -1299,17 +1308,38 @@ function App() {
               categoryAverage = ((totalEarned / totalPossible) * 100).toFixed(2)
             }
             
-            // Projected average (with modifications)
-            const totalEarnedModified = gradedAssignments.reduce((sum, { score, index }) => {
+            // Projected average (with modifications, dropped assignments, and hypothetical assignments)
+            // Filter out dropped assignments
+            const nonDroppedAssignments = gradedAssignments.filter(({ index }) => !droppedAssignments[index])
+            
+            // Calculate totals from non-dropped assignments with modifications
+            let projectedEarned = nonDroppedAssignments.reduce((sum, { score, index }) => {
               const modifiedScore = modifications[index] !== undefined ? modifications[index] : score
               return sum + (modifiedScore || 0)
             }, 0)
             
-            if (totalPossible > 0) {
-              projectedCategoryAverage = ((totalEarnedModified / totalPossible) * 100).toFixed(2)
+            let projectedPossible = nonDroppedAssignments.reduce((sum, { assignment }) => {
+              return sum + (assignment?.points_possible || 0)
+            }, 0)
+            
+            // Add hypothetical assignments for this group
+            const groupHypotheticals = hypotheticalAssignments[groupId] || []
+            groupHypotheticals.forEach(hypo => {
+              if (hypo.score !== '' && hypo.pointsPossible !== '') {
+                projectedEarned += parseFloat(hypo.score) || 0
+                projectedPossible += parseFloat(hypo.pointsPossible) || 0
+              }
+            })
+            
+            if (projectedPossible > 0) {
+              projectedCategoryAverage = ((projectedEarned / projectedPossible) * 100).toFixed(2)
+              
+              // Check if there are any modifications (score changes, dropped assignments, or hypothetical assignments)
               hasModifications = Object.keys(modifications).some(modIndex => 
                 gradedAssignments.some(({ index }) => index === parseInt(modIndex))
-              )
+              ) || Object.keys(droppedAssignments).some(dropIndex => 
+                gradedAssignments.some(({ index }) => index === parseInt(dropIndex))
+              ) || groupHypotheticals.some(hypo => hypo.score !== '' && hypo.pointsPossible !== '')
             }
           }
           

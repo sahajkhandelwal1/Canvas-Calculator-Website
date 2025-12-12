@@ -31,18 +31,20 @@ def get_courses():
     BASE_URL = get_base_url(canvas_url)
     headers = make_headers(token)
     
-    # Get user info for logging
+    # Get user info for logging and response
     try:
         user_response = requests.get(f"{BASE_URL}/users/{USER_ID}", headers=headers, timeout=5)
         if user_response.status_code == 200:
             user_data = user_response.json()
             username = user_data.get('name', 'Unknown User')
             user_id = user_data.get('id', 'Unknown ID')
+            user_info = {'name': username, 'id': user_id}
             print(f"\n{'='*60}")
             print(f"USER LOGIN: {username} (ID: {user_id}) - {canvas_url}")
             print(f"{'='*60}")
     except:
         print(f"\nUSER LOGIN: Unable to fetch user info - {canvas_url}")
+        user_info = {'name': 'Unknown User', 'id': 'Unknown ID'}
     
     courses_url = f"{BASE_URL}/users/{USER_ID}/courses?enrollment_state=active&include[]=enrollments&include[]=total_scores"
     
@@ -52,6 +54,8 @@ def get_courses():
         courses = response.json()
         
         result = []
+        user_info = {'name': 'Unknown User', 'id': 'Unknown ID'}
+        
         for course in courses:
             enrollments = course.get("enrollments", [])
             current_score = None
@@ -69,7 +73,13 @@ def get_courses():
                 'current_grade': current_grade
             })
         
-        return jsonify(result)
+        # Include user info in response
+        response_data = {
+            'courses': result,
+            'user': user_info
+        }
+        
+        return jsonify(response_data)
     except requests.exceptions.RequestException as e:
         return jsonify({'error': str(e)}), 500
 
@@ -440,7 +450,8 @@ def send_feedback():
     """Send feedback email - saves to log file and attempts email delivery"""
     try:
         feedback_text = request.json.get('feedback', '')
-        user_email = request.json.get('email', 'anonymous')
+        user_name = request.json.get('email', 'Anonymous')  # Using 'email' field for backward compatibility
+        user_id = request.json.get('userId', 'Unknown')
         
         if not feedback_text:
             return jsonify({'error': 'Feedback text required'}), 400
@@ -449,7 +460,7 @@ def send_feedback():
         print("\n" + "="*60)
         print("🎉 NEW FEEDBACK RECEIVED!")
         print("="*60)
-        print(f"From: {user_email}")
+        print(f"From: {user_name} (ID: {user_id})")
         print(f"Message:\n{feedback_text}")
         print("="*60 + "\n")
         
@@ -460,7 +471,7 @@ def send_feedback():
             with open('feedback.log', 'a', encoding='utf-8') as f:
                 f.write(f"\n{'='*60}\n")
                 f.write(f"Timestamp: {timestamp}\n")
-                f.write(f"From: {user_email}\n")
+                f.write(f"From: {user_name} (ID: {user_id})\n")
                 f.write(f"Message:\n{feedback_text}\n")
                 f.write(f"{'='*60}\n")
             print("✅ Feedback saved to feedback.log")
@@ -484,7 +495,7 @@ def send_feedback():
                 body = f"""
 New feedback received from Canvas Plus!
 
-From: {user_email}
+From: {user_name} (Canvas ID: {user_id})
 Timestamp: {timestamp}
 
 Message:
