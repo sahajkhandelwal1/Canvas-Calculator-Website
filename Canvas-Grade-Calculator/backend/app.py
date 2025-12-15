@@ -54,7 +54,6 @@ def get_courses():
         courses = response.json()
         
         result = []
-        user_info = {'name': 'Unknown User', 'id': 'Unknown ID'}
         
         for course in courses:
             enrollments = course.get("enrollments", [])
