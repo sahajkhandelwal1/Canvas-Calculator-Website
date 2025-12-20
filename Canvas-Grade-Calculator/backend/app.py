@@ -55,15 +55,75 @@ def get_courses():
         
         result = []
         
+        # Helper function to calculate grade for a course
+        def calculate_course_grade(course_id):
+            try:
+                # Get assignments and assignment groups for this course
+                assignments_url = f"{BASE_URL}/courses/{course_id}/students/submissions?student_ids[]={USER_ID}&include[]=assignment&per_page=50"
+                groups_url = f"{BASE_URL}/courses/{course_id}/assignment_groups?include[]=assignments"
+                
+                assignments_response = requests.get(assignments_url, headers=headers, timeout=10)
+                groups_response = requests.get(groups_url, headers=headers, timeout=10)
+                
+                if assignments_response.status_code == 200 and groups_response.status_code == 200:
+                    assignments_data = assignments_response.json()
+                    groups_data = groups_response.json()
+                    
+                    # Calculate grade using existing logic
+                    calculated_grade = calculate_grade_logic(assignments_data, groups_data)
+                    return calculated_grade
+                    
+            except Exception as e:
+                print(f"Error calculating grade for course {course_id}: {e}")
+                return None
+            
+            return None
+        
         for course in courses:
             enrollments = course.get("enrollments", [])
             current_score = None
             current_grade = None
             
+            # First try to get grade from Canvas enrollment data
             for e in enrollments:
                 if "computed_current_score" in e:
                     current_score = e["computed_current_score"]
                     current_grade = e["computed_current_grade"]
+            
+            # If no grade available (locked), calculate it manually
+            if current_score is None:
+                print(f"Grade locked for course {course.get('name')}, calculating manually...")
+                calculated_score = calculate_course_grade(course.get('id'))
+                if calculated_score is not None:
+                    current_score = round(calculated_score, 2)
+                    # Convert score to letter grade (basic conversion)
+                    if calculated_score >= 97:
+                        current_grade = "A+"
+                    elif calculated_score >= 93:
+                        current_grade = "A"
+                    elif calculated_score >= 90:
+                        current_grade = "A-"
+                    elif calculated_score >= 87:
+                        current_grade = "B+"
+                    elif calculated_score >= 83:
+                        current_grade = "B"
+                    elif calculated_score >= 80:
+                        current_grade = "B-"
+                    elif calculated_score >= 77:
+                        current_grade = "C+"
+                    elif calculated_score >= 73:
+                        current_grade = "C"
+                    elif calculated_score >= 70:
+                        current_grade = "C-"
+                    elif calculated_score >= 67:
+                        current_grade = "D+"
+                    elif calculated_score >= 63:
+                        current_grade = "D"
+                    elif calculated_score >= 60:
+                        current_grade = "D-"
+                    else:
+                        current_grade = "F"
+                    print(f"Calculated grade: {current_score}% ({current_grade})")
             
             result.append({
                 'id': course.get('id'),
