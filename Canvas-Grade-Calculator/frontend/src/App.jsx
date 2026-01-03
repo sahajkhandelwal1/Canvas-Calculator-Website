@@ -125,6 +125,9 @@ function App() {
   })
   const [showNameEditor, setShowNameEditor] = useState(false)
   const [userInfo, setUserInfo] = useState({ name: 'Anonymous', id: null })
+  const [assignmentSearch, setAssignmentSearch] = useState('')
+  const [showAssignmentSearch, setShowAssignmentSearch] = useState(false)
+  const [showCalculatePrompt, setShowCalculatePrompt] = useState(false)
 
   const presetBackgrounds = [
     { name: 'Network', url: 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=1920&q=80' },
@@ -468,6 +471,13 @@ function App() {
       newMods[index] = parseFloat(value)
     }
     setModifications(newMods)
+    
+    // Show calculate prompt when modifications are made
+    if (Object.keys(newMods).length > 0 || Object.keys(droppedAssignments).length > 0 || Object.keys(hypotheticalAssignments).length > 0) {
+      setShowCalculatePrompt(true)
+    } else {
+      setShowCalculatePrompt(false)
+    }
   }
 
   const toggleDropAssignment = (index) => {
@@ -478,6 +488,16 @@ function App() {
       } else {
         newDropped[index] = true
       }
+      
+      // Show calculate prompt when assignments are dropped/restored
+      setTimeout(() => {
+        if (Object.keys(modifications).length > 0 || Object.keys(newDropped).length > 0 || Object.keys(hypotheticalAssignments).length > 0) {
+          setShowCalculatePrompt(true)
+        } else {
+          setShowCalculatePrompt(false)
+        }
+      }, 0)
+      
       return newDropped
     })
   }
@@ -491,19 +511,45 @@ function App() {
   }
 
   const updateHypotheticalAssignment = (groupId, assignmentId, field, value) => {
-    setHypotheticalAssignments(prev => ({
-      ...prev,
-      [groupId]: prev[groupId].map(a => 
-        a.id === assignmentId ? { ...a, [field]: value } : a
-      )
-    }))
+    setHypotheticalAssignments(prev => {
+      const updated = {
+        ...prev,
+        [groupId]: prev[groupId].map(a => 
+          a.id === assignmentId ? { ...a, [field]: value } : a
+        )
+      }
+      
+      // Show calculate prompt when hypothetical assignments are updated
+      setTimeout(() => {
+        if (Object.keys(modifications).length > 0 || Object.keys(droppedAssignments).length > 0 || Object.keys(updated).length > 0) {
+          setShowCalculatePrompt(true)
+        } else {
+          setShowCalculatePrompt(false)
+        }
+      }, 0)
+      
+      return updated
+    })
   }
 
   const removeHypotheticalAssignment = (groupId, assignmentId) => {
-    setHypotheticalAssignments(prev => ({
-      ...prev,
-      [groupId]: prev[groupId].filter(a => a.id !== assignmentId)
-    }))
+    setHypotheticalAssignments(prev => {
+      const updated = {
+        ...prev,
+        [groupId]: prev[groupId].filter(a => a.id !== assignmentId)
+      }
+      
+      // Show calculate prompt when hypothetical assignments are removed
+      setTimeout(() => {
+        if (Object.keys(modifications).length > 0 || Object.keys(droppedAssignments).length > 0 || Object.keys(updated).length > 0) {
+          setShowCalculatePrompt(true)
+        } else {
+          setShowCalculatePrompt(false)
+        }
+      }, 0)
+      
+      return updated
+    })
   }
 
   const calculateProjectedGrade = async () => {
@@ -540,6 +586,7 @@ function App() {
       
       const data = await response.json()
       setProjectedGrade(data.grade)
+      setShowCalculatePrompt(false) // Hide prompt after successful calculation
     } catch (err) {
       setError(err.message)
     } finally {
@@ -1276,6 +1323,148 @@ function App() {
         </div>
       )}
 
+      {/* Assignment Search Section */}
+      <div className="assignment-search-section">
+        <div className="search-header">
+          <h3>Assignment Search</h3>
+          <button 
+            onClick={() => setShowAssignmentSearch(!showAssignmentSearch)}
+            className={`toggle-search-btn ${showAssignmentSearch ? 'active' : ''}`}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="11" cy="11" r="8"/>
+              <path d="m21 21-4.35-4.35"/>
+            </svg>
+            {showAssignmentSearch ? 'Hide Search' : 'Search Assignments'}
+          </button>
+        </div>
+        
+        {showAssignmentSearch && (
+          <div className="search-content">
+            <div className="search-input-container">
+              <input
+                type="text"
+                placeholder="Search assignments by name..."
+                value={assignmentSearch}
+                onChange={(e) => setAssignmentSearch(e.target.value)}
+                className="assignment-search-input"
+              />
+              {assignmentSearch && (
+                <button 
+                  onClick={() => setAssignmentSearch('')}
+                  className="clear-search-btn"
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <line x1="18" y1="6" x2="6" y2="18"/>
+                    <line x1="6" y1="6" x2="18" y2="18"/>
+                  </svg>
+                </button>
+              )}
+            </div>
+            
+            {assignmentSearch.trim() && (
+              <div className="search-results">
+                {(() => {
+                  const searchTerm = assignmentSearch.toLowerCase().trim()
+                  const matchingAssignments = []
+                  
+                  // Search through all assignments
+                  Object.entries(grouped).forEach(([groupId, groupAssignments]) => {
+                    const group = groupMap[groupId]
+                    groupAssignments.forEach(({ assignment, score, index }) => {
+                      const assignmentName = assignment?.name || 'Unknown'
+                      if (assignmentName.toLowerCase().includes(searchTerm)) {
+                        matchingAssignments.push({
+                          assignment,
+                          score,
+                          index,
+                          groupName: group?.name || 'Unknown Group',
+                          pointsPossible: assignment?.points_possible || 0
+                        })
+                      }
+                    })
+                  })
+                  
+                  if (matchingAssignments.length === 0) {
+                    return (
+                      <div className="no-search-results">
+                        No assignments found matching "{assignmentSearch}"
+                      </div>
+                    )
+                  }
+                  
+                  return (
+                    <div className="search-results-list">
+                      <div className="search-results-header">
+                        Found {matchingAssignments.length} assignment{matchingAssignments.length !== 1 ? 's' : ''}:
+                      </div>
+                      {matchingAssignments.map(({ assignment, score, index, groupName, pointsPossible }) => {
+                        const currentScore = modifications[index] !== undefined ? modifications[index] : score
+                        const percentage = pointsPossible > 0 && score !== null ? ((score / pointsPossible) * 100).toFixed(2) : null
+                        
+                        return (
+                          <div key={index} className="search-result-item">
+                            <div className="search-result-info">
+                              <div className="search-result-name">
+                                {assignment?.name || 'Unknown'}
+                                <span className="search-result-group">({groupName})</span>
+                              </div>
+                              <div className="search-result-details">
+                                {score !== null ? (
+                                  <>
+                                    {percentage !== null && (
+                                      <span className="search-result-percentage">
+                                        ({percentage}%)
+                                        {modifications[index] !== undefined && pointsPossible > 0 && (
+                                          <>
+                                            <span className="arrow-small"> → </span>
+                                            <span className={`what-if-percentage ${parseFloat(((modifications[index] / pointsPossible) * 100).toFixed(2)) >= parseFloat(percentage) ? 'positive' : 'negative'}`}>
+                                              ({((modifications[index] / pointsPossible) * 100).toFixed(2)}%)
+                                            </span>
+                                          </>
+                                        )}
+                                      </span>
+                                    )}
+                                    {' '}{score} / {pointsPossible}
+                                  </>
+                                ) : (
+                                  `Not graded / ${pointsPossible}`
+                                )}
+                              </div>
+                            </div>
+                            <div className="search-result-actions">
+                              <label className="drop-checkbox" onClick={(e) => e.stopPropagation()}>
+                                <input
+                                  type="checkbox"
+                                  checked={droppedAssignments[index] || false}
+                                  onChange={() => toggleDropAssignment(index)}
+                                  title="Drop this assignment from grade calculation"
+                                />
+                                <span className="checkbox-label">Drop</span>
+                              </label>
+                              <input
+                                type="number"
+                                step="0.01"
+                                max={pointsPossible}
+                                placeholder={score !== null ? score : 'Enter score'}
+                                value={modifications[index] !== undefined ? modifications[index] : ''}
+                                onChange={(e) => handleModification(index, e.target.value)}
+                                className="search-score-input"
+                                disabled={droppedAssignments[index]}
+                              />
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )
+                })()}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
       <div className="assignments-section">
         <h2>What-If Analysis</h2>
         <p className="hint">Modify assignment scores to see projected grade changes</p>
@@ -1508,6 +1697,37 @@ function App() {
       )}
       </>
       )}
+
+      {/* Floating Calculate Prompt */}
+      {showCalculatePrompt && (
+        <div className="calculate-prompt">
+          <div className="calculate-prompt-content">
+            <div className="calculate-prompt-text">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M9 11H5a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7a2 2 0 0 0-2-2h-4"/>
+                <polyline points="6 9 12 15 18 9"/>
+              </svg>
+              <span>You have unsaved changes</span>
+            </div>
+            <div className="calculate-prompt-actions">
+              <button 
+                onClick={() => setShowCalculatePrompt(false)}
+                className="dismiss-prompt-btn"
+              >
+                Dismiss
+              </button>
+              <button 
+                onClick={calculateProjectedGrade}
+                disabled={loading}
+                className="calculate-prompt-btn"
+              >
+                {loading ? 'Calculating...' : 'Calculate Grade'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <Analytics />
     </div>
   )
