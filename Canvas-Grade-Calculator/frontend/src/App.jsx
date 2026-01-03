@@ -128,6 +128,8 @@ function App() {
   const [assignmentSearch, setAssignmentSearch] = useState('')
   const [showAssignmentSearch, setShowAssignmentSearch] = useState(false)
   const [showCalculatePrompt, setShowCalculatePrompt] = useState(false)
+  const [selectedAssignmentDetail, setSelectedAssignmentDetail] = useState(null)
+  const [showAssignmentDetail, setShowAssignmentDetail] = useState(false)
 
   const presetBackgrounds = [
     { name: 'Network', url: 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=1920&q=80' },
@@ -163,6 +165,30 @@ function App() {
     }
     setCustomCourseNames(updatedNames)
     localStorage.setItem('customCourseNames', JSON.stringify(updatedNames))
+  }
+
+  // Open assignment detail view
+  const openAssignmentDetail = (assignment, submission, groupName, index) => {
+    console.log('=== Assignment Detail Debug ===')
+    console.log('Assignment:', assignment)
+    console.log('Submission:', submission)
+    console.log('Submission comments:', submission?.submission_comments)
+    console.log('All submission keys:', Object.keys(submission || {}))
+    console.log('================================')
+    
+    setSelectedAssignmentDetail({
+      assignment,
+      submission,
+      groupName,
+      index,
+      pointsPossible: assignment?.points_possible || 0,
+      score: submission?.score,
+      gradedAt: submission?.graded_at,
+      submittedAt: submission?.submitted_at,
+      comments: submission?.submission_comments || [],
+      htmlUrl: assignment?.html_url
+    })
+    setShowAssignmentDetail(true)
   }
 
   const handleCustomImage = (e) => {
@@ -1277,6 +1303,240 @@ function App() {
         </>
       )}
 
+      {/* Assignment Detail Modal */}
+      {showAssignmentDetail && selectedAssignmentDetail && (
+        <>
+          <div className="bg-overlay" onClick={() => setShowAssignmentDetail(false)}></div>
+          <div className="assignment-detail-modal">
+            <div className="modal-header">
+              <h3>{selectedAssignmentDetail.assignment?.name || 'Assignment Details'}</h3>
+              <button onClick={() => setShowAssignmentDetail(false)} className="close-modal-btn">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <line x1="18" y1="6" x2="6" y2="18"/>
+                  <line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+              </button>
+            </div>
+            <div className="assignment-detail-content">
+              <div className="assignment-detail-main">
+                <div className="assignment-detail-section">
+                  <h4>Assignment Information</h4>
+                  <div className="detail-grid">
+                    <div className="detail-item">
+                      <label>Course Category</label>
+                      <span>{selectedAssignmentDetail.groupName}</span>
+                    </div>
+                    <div className="detail-item">
+                      <label>Points Possible</label>
+                      <span>{selectedAssignmentDetail.pointsPossible}</span>
+                    </div>
+                    <div className="detail-item">
+                      <label>Current Score</label>
+                      <span>
+                        {selectedAssignmentDetail.score !== null ? (
+                          <>
+                            {selectedAssignmentDetail.score} / {selectedAssignmentDetail.pointsPossible}
+                            {selectedAssignmentDetail.pointsPossible > 0 && (
+                              <span className="detail-percentage">
+                                ({((selectedAssignmentDetail.score / selectedAssignmentDetail.pointsPossible) * 100).toFixed(2)}%)
+                              </span>
+                            )}
+                          </>
+                        ) : (
+                          'Not graded'
+                        )}
+                      </span>
+                    </div>
+                    {modifications[selectedAssignmentDetail.index] !== undefined && (
+                      <div className="detail-item">
+                        <label>Modified Score</label>
+                        <span className="modified-score">
+                          {modifications[selectedAssignmentDetail.index]} / {selectedAssignmentDetail.pointsPossible}
+                          {selectedAssignmentDetail.pointsPossible > 0 && (
+                            <span className="detail-percentage">
+                              ({((modifications[selectedAssignmentDetail.index] / selectedAssignmentDetail.pointsPossible) * 100).toFixed(2)}%)
+                            </span>
+                          )}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {selectedAssignmentDetail.assignment?.description && (
+                  <div className="assignment-detail-section">
+                    <h4>Description</h4>
+                    <div 
+                      className="assignment-description"
+                      dangerouslySetInnerHTML={{ __html: selectedAssignmentDetail.assignment.description }}
+                    />
+                  </div>
+                )}
+
+                <div className="assignment-detail-section">
+                  <h4>Timeline</h4>
+                  <div className="timeline-grid">
+                    {selectedAssignmentDetail.assignment?.due_at && (
+                      <div className="timeline-item">
+                        <div className="timeline-icon">📅</div>
+                        <div className="timeline-content">
+                          <label>Due Date</label>
+                          <span>{new Date(selectedAssignmentDetail.assignment.due_at).toLocaleString()}</span>
+                        </div>
+                      </div>
+                    )}
+                    {selectedAssignmentDetail.submittedAt && (
+                      <div className="timeline-item">
+                        <div className="timeline-icon">📤</div>
+                        <div className="timeline-content">
+                          <label>Submitted</label>
+                          <span>{new Date(selectedAssignmentDetail.submittedAt).toLocaleString()}</span>
+                        </div>
+                      </div>
+                    )}
+                    {selectedAssignmentDetail.gradedAt && (
+                      <div className="timeline-item">
+                        <div className="timeline-icon">✅</div>
+                        <div className="timeline-content">
+                          <label>Graded</label>
+                          <span>{new Date(selectedAssignmentDetail.gradedAt).toLocaleString()}</span>
+                        </div>
+                      </div>
+                    )}
+                    {selectedAssignmentDetail.assignment?.lock_at && (
+                      <div className="timeline-item">
+                        <div className="timeline-icon">🔒</div>
+                        <div className="timeline-content">
+                          <label>Locks</label>
+                          <span>{new Date(selectedAssignmentDetail.assignment.lock_at).toLocaleString()}</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {selectedAssignmentDetail.comments && selectedAssignmentDetail.comments.length > 0 && (
+                  <div className="assignment-detail-section">
+                    <h4>Comments</h4>
+                    <div className="comments-list">
+                      {selectedAssignmentDetail.comments.map((comment, idx) => (
+                        <div key={idx} className="comment-item">
+                          <div className="comment-author">{comment.author_name}</div>
+                          <div className="comment-text">{comment.comment}</div>
+                          <div className="comment-date">
+                            {new Date(comment.created_at).toLocaleString()}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="assignment-detail-sidebar">
+                <div className="detail-actions">
+                  <h4>Quick Actions</h4>
+                  
+                  <div className="action-item">
+                    <label>Modify Score</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      max={selectedAssignmentDetail.pointsPossible}
+                      placeholder={selectedAssignmentDetail.score !== null ? selectedAssignmentDetail.score : 'Enter score'}
+                      value={modifications[selectedAssignmentDetail.index] !== undefined ? modifications[selectedAssignmentDetail.index] : ''}
+                      onChange={(e) => handleModification(selectedAssignmentDetail.index, e.target.value)}
+                      className="detail-score-input"
+                      disabled={droppedAssignments[selectedAssignmentDetail.index]}
+                    />
+                  </div>
+
+                  <div className="action-item">
+                    <label className="drop-checkbox-detail">
+                      <input
+                        type="checkbox"
+                        checked={droppedAssignments[selectedAssignmentDetail.index] || false}
+                        onChange={() => toggleDropAssignment(selectedAssignmentDetail.index)}
+                      />
+                      <span>Drop from grade calculation</span>
+                    </label>
+                  </div>
+
+                  {selectedAssignmentDetail.htmlUrl && (
+                    <button 
+                      onClick={() => window.open(selectedAssignmentDetail.htmlUrl, '_blank', 'noopener,noreferrer')}
+                      className="open-canvas-btn"
+                    >
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                        <polyline points="15 3 21 3 21 9"/>
+                        <line x1="10" y1="14" x2="21" y2="3"/>
+                      </svg>
+                      Open in Canvas
+                    </button>
+                  )}
+                </div>
+
+                {/* Grading Information Section */}
+                <div className="grading-info-section">
+                  <h4>Grading Information</h4>
+                  
+                  {selectedAssignmentDetail.gradedAt && (
+                    <div className="grading-detail">
+                      <div className="grading-icon">✅</div>
+                      <div className="grading-content">
+                        <label>Graded On</label>
+                        <span>{new Date(selectedAssignmentDetail.gradedAt).toLocaleDateString()}</span>
+                        <span className="grading-time">
+                          {new Date(selectedAssignmentDetail.gradedAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
+                  {selectedAssignmentDetail.comments && selectedAssignmentDetail.comments.length > 0 && (
+                    <div className="sidebar-comments">
+                      <div className="comments-header">
+                        <div className="comments-icon">💬</div>
+                        <span>Teacher Comments ({selectedAssignmentDetail.comments.length})</span>
+                      </div>
+                      <div className="sidebar-comments-list">
+                        {selectedAssignmentDetail.comments.slice(0, 2).map((comment, idx) => (
+                          <div key={idx} className="sidebar-comment-item">
+                            <div className="sidebar-comment-author">{comment.author_name}</div>
+                            <div className="sidebar-comment-text">
+                              {comment.comment.length > 100 
+                                ? `${comment.comment.substring(0, 100)}...` 
+                                : comment.comment
+                              }
+                            </div>
+                            <div className="sidebar-comment-date">
+                              {new Date(comment.created_at).toLocaleDateString()}
+                            </div>
+                          </div>
+                        ))}
+                        {selectedAssignmentDetail.comments.length > 2 && (
+                          <div className="more-comments">
+                            +{selectedAssignmentDetail.comments.length - 2} more comments
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {(!selectedAssignmentDetail.gradedAt && (!selectedAssignmentDetail.comments || selectedAssignmentDetail.comments.length === 0)) && (
+                    <div className="no-grading-info">
+                      <div className="no-info-icon">📝</div>
+                      <span>No grading information available</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+
       {!loading && (
         <>
 
@@ -1371,7 +1631,8 @@ function App() {
                   // Search through all assignments
                   Object.entries(grouped).forEach(([groupId, groupAssignments]) => {
                     const group = groupMap[groupId]
-                    groupAssignments.forEach(({ assignment, score, index }) => {
+                    groupAssignments.forEach((submissionData) => {
+                      const { assignment, score, index } = submissionData
                       const assignmentName = assignment?.name || 'Unknown'
                       if (assignmentName.toLowerCase().includes(searchTerm)) {
                         matchingAssignments.push({
@@ -1379,7 +1640,8 @@ function App() {
                           score,
                           index,
                           groupName: group?.name || 'Unknown Group',
-                          pointsPossible: assignment?.points_possible || 0
+                          pointsPossible: assignment?.points_possible || 0,
+                          submissionData // Add the full submission data
                         })
                       }
                     })
@@ -1398,12 +1660,20 @@ function App() {
                       <div className="search-results-header">
                         Found {matchingAssignments.length} assignment{matchingAssignments.length !== 1 ? 's' : ''}:
                       </div>
-                      {matchingAssignments.map(({ assignment, score, index, groupName, pointsPossible }) => {
+                      {matchingAssignments.map(({ assignment, score, index, groupName, pointsPossible, submissionData }) => {
                         const currentScore = modifications[index] !== undefined ? modifications[index] : score
                         const percentage = pointsPossible > 0 && score !== null ? ((score / pointsPossible) * 100).toFixed(2) : null
                         
                         return (
-                          <div key={index} className="search-result-item">
+                          <div 
+                            key={index} 
+                            className="search-result-item clickable"
+                            onClick={(e) => {
+                              if (e.target.tagName !== 'INPUT' && e.target.type !== 'checkbox') {
+                                openAssignmentDetail(assignment, submissionData, groupName, index)
+                              }
+                            }}
+                          >
                             <div className="search-result-info">
                               <div className="search-result-name">
                                 {assignment?.name || 'Unknown'}
@@ -1468,6 +1738,14 @@ function App() {
       <div className="assignments-section">
         <h2>What-If Analysis</h2>
         <p className="hint">Modify assignment scores to see projected grade changes</p>
+        <div className="user-tip">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <circle cx="12" cy="12" r="10"/>
+            <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
+            <line x1="12" y1="17" x2="12.01" y2="17"/>
+          </svg>
+          <span>💡 Tip: Click on any assignment to view detailed information, comments, and timeline</span>
+        </div>
         
         {Object.entries(grouped).map(([groupId, groupAssignments]) => {
           const group = groupMap[groupId]
@@ -1558,7 +1836,8 @@ function App() {
                 )}
               </div>
               <div className="assignments-list">
-                {groupAssignments.map(({ assignment, score, index }) => {
+                {groupAssignments.map((submissionData) => {
+                  const { assignment, score, index } = submissionData
                   const pointsPossible = assignment?.points_possible || 0
                   const currentScore = modifications[index] !== undefined ? modifications[index] : score
                   const percentage = pointsPossible > 0 && score !== null ? ((score / pointsPossible) * 100).toFixed(2) : null
@@ -1566,8 +1845,8 @@ function App() {
                   const assignmentUrl = assignment?.html_url
                   
                   const handleAssignmentClick = (e) => {
-                    if (assignmentUrl && e.target.tagName !== 'INPUT') {
-                      window.open(assignmentUrl, '_blank', 'noopener,noreferrer')
+                    if (e.target.tagName !== 'INPUT' && e.target.type !== 'checkbox') {
+                      openAssignmentDetail(assignment, submissionData, group.name, index)
                     }
                   }
                   
@@ -1589,7 +1868,6 @@ function App() {
                       <div className="assignment-info">
                         <span className="assignment-name">
                           {assignment?.name || 'Unknown'}
-                          {assignmentUrl && <span className="external-link-icon"> ↗</span>}
                         </span>
                         <span className="assignment-points">
                           {score !== null ? (

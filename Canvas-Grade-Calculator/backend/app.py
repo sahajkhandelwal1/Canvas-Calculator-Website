@@ -59,7 +59,7 @@ def get_courses():
         def calculate_course_grade(course_id):
             try:
                 # Get assignments and assignment groups for this course
-                assignments_url = f"{BASE_URL}/courses/{course_id}/students/submissions?student_ids[]={USER_ID}&include[]=assignment&per_page=50"
+                assignments_url = f"{BASE_URL}/courses/{course_id}/students/submissions?student_ids[]={USER_ID}&include[]=assignment&include[]=submission_comments&per_page=50"
                 groups_url = f"{BASE_URL}/courses/{course_id}/assignment_groups?include[]=assignments"
                 
                 assignments_response = requests.get(assignments_url, headers=headers, timeout=10)
@@ -152,7 +152,7 @@ def get_assignments(course_id):
     
     BASE_URL = get_base_url(canvas_url)
     headers = make_headers(token)
-    url = f"{BASE_URL}/courses/{course_id}/students/submissions?student_ids[]={USER_ID}&include[]=assignment&per_page=50"
+    url = f"{BASE_URL}/courses/{course_id}/students/submissions?student_ids[]={USER_ID}&include[]=assignment&include[]=submission_comments&per_page=50"
     
     assignments = []
     max_retries = 2
