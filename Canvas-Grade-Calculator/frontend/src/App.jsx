@@ -145,9 +145,17 @@ function App() {
   const changeBackground = (url) => {
     setBackgroundImage(url)
     localStorage.setItem('backgroundImage', url)
-    document.body.style.backgroundImage = url 
+    
+    // Apply background with mobile fallback
+    const backgroundStyle = url 
       ? `linear-gradient(135deg, rgba(0, 0, 0, 0.6) 0%, rgba(26, 26, 26, 0.65) 50%, rgba(10, 10, 10, 0.6) 100%), url('${url}')`
       : 'linear-gradient(135deg, #000000 0%, #1a1a1a 50%, #0a0a0a 100%)'
+    
+    document.body.style.backgroundImage = backgroundStyle
+    document.body.style.backgroundSize = 'cover'
+    document.body.style.backgroundPosition = 'center'
+    document.body.style.backgroundAttachment = 'fixed'
+    document.body.style.backgroundColor = '#000000' // Fallback color
   }
 
   // Helper function to get display name (custom or original)
@@ -220,10 +228,15 @@ function App() {
     }
   }, [])
 
+  // Detect if device is mobile
+  const isMobile = () => {
+    return window.innerWidth <= 768 || /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
+  }
+
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
-        distance: 8, // Require 8px movement before drag starts
+        distance: isMobile() ? 50 : 8, // Require more movement on mobile to prevent accidental drags
       },
     }),
     useSensor(KeyboardSensor, {
@@ -764,27 +777,58 @@ function App() {
             </button>
           </div>
         </div>
-        <DndContext
-          sensors={sensors}
-          collisionDetection={closestCenter}
-          onDragEnd={handleDragEnd}
-        >
-          <SortableContext
-            items={courses.map(c => c.id)}
-            strategy={rectSortingStrategy}
+        {isMobile() ? (
+          // On mobile, render course cards without drag-and-drop
+          <div className="courses-grid">
+            {courses.map(course => (
+              <div
+                key={course.id}
+                className="course-card"
+                onClick={() => loadCourse(course.id)}
+              >
+                <h3>{getDisplayName(course)}</h3>
+                {course.current_score !== null ? (
+                  <div className="grade">
+                    <span className="grade-letter">{course.current_grade}</span>
+                    <span className="grade-percent">
+                      <CountUp 
+                        from={0} 
+                        to={course.current_score} 
+                        duration={1}
+                        className="count-up-text"
+                      />%
+                    </span>
+                  </div>
+                ) : (
+                  <div className="no-grade">No grade yet</div>
+                )}
+              </div>
+            ))}
+          </div>
+        ) : (
+          // On desktop, render with drag-and-drop functionality
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={handleDragEnd}
           >
-            <div className="courses-grid">
-              {courses.map(course => (
-                <SortableCourseCard
-                  key={course.id}
-                  course={course}
-                  displayName={getDisplayName(course)}
-                  onClick={() => loadCourse(course.id)}
-                />
-              ))}
-            </div>
-          </SortableContext>
-        </DndContext>
+            <SortableContext
+              items={courses.map(c => c.id)}
+              strategy={rectSortingStrategy}
+            >
+              <div className="courses-grid">
+                {courses.map(course => (
+                  <SortableCourseCard
+                    key={course.id}
+                    course={course}
+                    displayName={getDisplayName(course)}
+                    onClick={() => loadCourse(course.id)}
+                  />
+                ))}
+              </div>
+            </SortableContext>
+          </DndContext>
+        )}
 
         {(loadingUpcoming || loadingOverdue || upcomingAssignments.length > 0 || overdueAssignments.length > 0) && (
           <div className="assignments-section">

@@ -4,6 +4,24 @@
   padding: 2rem;
 }
 
+/* Mobile-specific container fixes */
+@media (max-width: 768px) {
+  .container {
+    padding: 1rem;
+    /* Ensure proper scrolling on mobile */
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+  }
+  
+  /* Ensure body and html have proper mobile styling */
+  html, body {
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+    /* Prevent zoom on input focus */
+    -webkit-text-size-adjust: 100%;
+  }
+}
+
 .header {
   display: flex;
   align-items: center;
@@ -58,6 +76,38 @@
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 20px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+}
+
+/* Mobile-specific login card fixes */
+@media (max-width: 768px) {
+  /* Mobile-specific login card fixes */
+  .login-card {
+    margin: 2rem 1rem;
+    padding: 2rem;
+    /* Ensure visibility on mobile with stronger background */
+    background: rgba(0, 0, 0, 0.8);
+    backdrop-filter: blur(15px);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+  }
+  
+  .login-card input {
+    /* Prevent zoom on input focus on iOS */
+    font-size: 16px;
+    /* Stronger background for mobile */
+    background: rgba(255, 255, 255, 0.15);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+  }
+  
+  .login-card input:focus {
+    background: rgba(255, 255, 255, 0.2);
+    border-color: rgba(99, 102, 241, 0.6);
+  }
+  
+  /* Ensure body has a dark background on mobile */
+  body {
+    background: #000000 !important;
+    background-image: linear-gradient(135deg, #000000 0%, #1a1a1a 50%, #0a0a0a 100%) !important;
+  }
 }
 
 .login-card h1 {
@@ -175,6 +225,17 @@
   gap: 1.5rem;
 }
 
+/* Mobile-specific course grid fixes */
+@media (max-width: 768px) {
+  .courses-grid {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+    /* Improve touch scrolling */
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+  }
+}
+
 .course-card {
   background: rgba(255, 255, 255, 0.05);
   backdrop-filter: blur(20px);
@@ -185,6 +246,29 @@
   cursor: pointer;
   transition: all 0.3s ease;
   min-height: 140px;
+}
+
+/* Mobile-specific course card fixes */
+@media (max-width: 768px) {
+  .course-card {
+    padding: 1.5rem;
+    min-height: 120px;
+    /* Disable drag cursor on mobile */
+    cursor: pointer !important;
+    /* Prevent touch callouts and selection */
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    -khtml-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+    /* Improve touch response */
+    touch-action: manipulation;
+  }
+  
+  .course-card:active {
+    cursor: pointer !important;
+  }
 }
 
 .course-card:hover {
