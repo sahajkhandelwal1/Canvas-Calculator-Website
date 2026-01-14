@@ -40,10 +40,10 @@ def get_courses():
             user_id = user_data.get('id', 'Unknown ID')
             user_info = {'name': username, 'id': user_id}
             print(f"\n{'='*60}")
-            print(f"USER LOGIN: {username} (ID: {user_id}) - {canvas_url}")
+            print(f"👤 USER LOGIN: {username} (ID: {user_id})")
+            print(f"🌐 Canvas: {canvas_url}")
             print(f"{'='*60}")
     except:
-        print(f"\nUSER LOGIN: Unable to fetch user info - {canvas_url}")
         user_info = {'name': 'Unknown User', 'id': 'Unknown ID'}
     
     courses_url = f"{BASE_URL}/users/{USER_ID}/courses?enrollment_state=active&include[]=enrollments&include[]=total_scores"
@@ -74,7 +74,6 @@ def get_courses():
                     return calculated_grade
                     
             except Exception as e:
-                print(f"Error calculating grade for course {course_id}: {e}")
                 return None
             
             return None
@@ -92,7 +91,6 @@ def get_courses():
             
             # If no grade available (locked), calculate it manually
             if current_score is None:
-                print(f"Grade locked for course {course.get('name')}, calculating manually...")
                 calculated_score = calculate_course_grade(course.get('id'))
                 if calculated_score is not None:
                     current_score = round(calculated_score, 2)
@@ -123,7 +121,6 @@ def get_courses():
                         current_grade = "D-"
                     else:
                         current_grade = "F"
-                    print(f"Calculated grade: {current_score}% ({current_grade})")
             
             result.append({
                 'id': course.get('id'),
@@ -131,6 +128,8 @@ def get_courses():
                 'current_score': current_score,
                 'current_grade': current_grade
             })
+        
+        print(f"✅ Loaded {len(result)} courses")
         
         # Include user info in response
         response_data = {
@@ -170,8 +169,6 @@ def get_assignments(course_id):
                     # Check if response is JSON
                     content_type = response.headers.get('Content-Type', '')
                     if 'application/json' not in content_type:
-                        print(f"Non-JSON response for course {course_id}: {content_type}")
-                        print(f"Response preview: {response.text[:200]}")
                         retry_count += 1
                         if retry_count < max_retries:
                             import time
@@ -186,7 +183,6 @@ def get_assignments(course_id):
                 except requests.exceptions.Timeout:
                     retry_count += 1
                     if retry_count < max_retries:
-                        print(f"Timeout for course {course_id}, retrying...")
                         import time
                         time.sleep(2)
                     else:
@@ -204,10 +200,8 @@ def get_assignments(course_id):
             else:
                 url = None
         
-        print(f"Successfully fetched {len(assignments)} assignments for course {course_id}")
         return jsonify(assignments)
     except requests.exceptions.RequestException as e:
-        print(f"Error fetching assignments for course {course_id}: {str(e)}")
         return jsonify({'error': f'Failed to load course data: {str(e)}'}), 500
 
 @app.route('/api/course/<int:course_id>/groups', methods=['POST'])
@@ -249,8 +243,6 @@ def get_grading_scheme(course_id):
             course_data = course_response.json()
             grading_standard = course_data.get('grading_standard')
             
-            print(f"Grading standard for course {course_id}:", grading_standard)
-            
             # Canvas grading_standard can be a dict with 'grading_scheme' key or direct array
             if grading_standard:
                 # If it's a dict, extract the grading_scheme array
@@ -259,15 +251,12 @@ def get_grading_scheme(course_id):
                 else:
                     scheme = grading_standard
                 
-                print(f"Processed grading scheme:", scheme)
                 return jsonify({'grading_scheme': scheme})
         
         # If no custom grading standard, return default
-        print(f"No custom grading standard for course {course_id}, using default")
         return jsonify({'grading_scheme': None})
         
     except requests.exceptions.RequestException as e:
-        print(f"Error fetching grading scheme: {e}")
         return jsonify({'error': str(e)}), 500
 
 def score_to_letter_grade(score, grading_scheme=None):
@@ -347,8 +336,6 @@ def get_upcoming_assignments():
         courses_response.raise_for_status()
         courses = courses_response.json()
         
-        print(f"Found {len(courses)} courses")
-        
         upcoming = []
         from datetime import timezone
         now = datetime.now(timezone.utc)
@@ -365,7 +352,6 @@ def get_upcoming_assignments():
                 
                 if assignments_response.status_code == 200:
                     assignments = assignments_response.json()
-                    print(f"Course {course_name}: {len(assignments)} assignments")
                     
                     for assignment in assignments:
                         due_at = assignment.get('due_at')
@@ -383,7 +369,6 @@ def get_upcoming_assignments():
                                         'html_url': assignment.get('html_url', '')
                                     })
                             except Exception as e:
-                                print(f"Error parsing assignment: {e}")
                                 pass
             except:
                 pass
@@ -398,8 +383,6 @@ def get_upcoming_assignments():
         
         # Sort by due date
         upcoming.sort(key=lambda x: datetime.fromisoformat(x['due_at'].replace('Z', '+00:00')))
-        
-        print(f"Total upcoming assignments found: {len(upcoming)}")
         
         return jsonify(upcoming[:10])  # Return top 10 upcoming
     except requests.exceptions.RequestException as e:
@@ -425,8 +408,6 @@ def get_overdue_assignments():
         courses_response = requests.get(courses_url, headers=headers)
         courses_response.raise_for_status()
         courses = courses_response.json()
-        
-        print(f"Found {len(courses)} courses for overdue check")
         
         overdue = []
         from datetime import timezone
@@ -472,7 +453,6 @@ def get_overdue_assignments():
                                         'days_overdue': (now - due_date).days
                                     })
                             except Exception as e:
-                                print(f"Error parsing overdue assignment: {e}")
                                 pass
             except:
                 pass
@@ -487,8 +467,6 @@ def get_overdue_assignments():
         
         # Sort by due date (most recently overdue first)
         overdue.sort(key=lambda x: datetime.fromisoformat(x['due_at'].replace('Z', '+00:00')), reverse=True)
-        
-        print(f"Total overdue assignments found: {len(overdue)}")
         
         return jsonify(overdue[:15])  # Return top 15 overdue
     except requests.exceptions.RequestException as e:

@@ -187,11 +187,9 @@ function App() {
     const maxAge = 24 * 60 * 60 * 1000 // 24 hours
     
     if (cacheAge > maxAge) {
-      console.log(`Cache expired for course ${courseId}`)
       return null
     }
     
-    console.log(`Using cached data for course ${courseId}`)
     return cached
   }
 
@@ -210,7 +208,6 @@ function App() {
   const clearCourseCache = () => {
     setCourseDataCache({})
     localStorage.removeItem('courseDataCache')
-    console.log('Course cache cleared')
   }
 
   // Determine semester based on assignment due date
@@ -240,8 +237,6 @@ function App() {
       return 'N/A'
     }
     
-    console.log('Converting score:', score, 'with grading scheme:', gradingScheme)
-    
     // If custom grading scheme provided, use it
     if (gradingScheme && Array.isArray(gradingScheme)) {
       // Sort by value descending to check from highest to lowest
@@ -250,8 +245,6 @@ function App() {
         const bVal = Array.isArray(b) ? b[1] : b.value
         return bVal - aVal
       })
-      
-      console.log('Sorted grading scheme:', sortedScheme)
       
       for (const entry of sortedScheme) {
         let name, threshold
@@ -267,16 +260,11 @@ function App() {
           continue
         }
         
-        console.log(`Checking if ${score} >= ${threshold} for grade ${name}`)
-        
         if (score >= threshold) {
-          console.log(`Match found: ${name}`)
           return name
         }
       }
     }
-    
-    console.log('Using default grading scale')
     
     // Default grading scale
     if (score >= 97) return "A+"
@@ -376,7 +364,6 @@ function App() {
               // Check if we have cached semester grade
               const semesterKey = `semester${semester}`
               if (cachedData[semesterKey]) {
-                console.log(`Using cached semester ${semester} grade for course ${course.id}`)
                 return {
                   ...course,
                   current_score: cachedData[semesterKey].score,
@@ -536,13 +523,6 @@ function App() {
 
   // Open assignment detail view
   const openAssignmentDetail = (assignment, submission, groupName, index) => {
-    console.log('=== Assignment Detail Debug ===')
-    console.log('Assignment:', assignment)
-    console.log('Submission:', submission)
-    console.log('Submission comments:', submission?.submission_comments)
-    console.log('All submission keys:', Object.keys(submission || {}))
-    console.log('================================')
-    
     setSelectedAssignmentDetail({
       assignment,
       submission,
@@ -593,7 +573,6 @@ function App() {
       const savedSemester = localStorage.getItem('selectedSemester')
       // Only apply if a specific semester was saved
       if (savedSemester && savedSemester !== 'all') {
-        console.log('Applying saved semester filter on initial load:', savedSemester)
         hasAppliedInitialSemesterFilter.current = true
         updateCourseGradesForSemester(savedSemester)
       }
@@ -763,7 +742,6 @@ function App() {
           throw new Error('Failed to fetch')
         })
         .then(data => {
-          console.log('Upcoming assignments received:', data)
           setUpcomingAssignments(data || [])
           setLoadingUpcoming(false)
         })
@@ -784,7 +762,6 @@ function App() {
           throw new Error('Failed to fetch')
         })
         .then(data => {
-          console.log('Overdue assignments received:', data)
           setOverdueAssignments(data || [])
           setLoadingOverdue(false)
         })
@@ -814,6 +791,10 @@ function App() {
     setProjectedGrade(null)
     setHypotheticalAssignments({})
     setSelectedCourse({ id: courseId, name: 'Loading...', loading: true })
+    
+    // Get course name for logging
+    const courseName = courses.find(c => c.id === courseId)?.name || 'Unknown Course'
+    console.log(`📚 Loading course: ${courseName}`)
     
     // Push to browser history (unless navigating via back/forward)
     if (!skipHistory) {
