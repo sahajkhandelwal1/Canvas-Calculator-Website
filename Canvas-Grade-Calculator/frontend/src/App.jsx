@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Analytics } from "@vercel/analytics/react"
 import CountUp from './CountUp'
 import BounceCards from './BounceCards'
@@ -130,6 +130,20 @@ function App() {
   const [showCalculatePrompt, setShowCalculatePrompt] = useState(false)
   const [selectedAssignmentDetail, setSelectedAssignmentDetail] = useState(null)
   const [showAssignmentDetail, setShowAssignmentDetail] = useState(false)
+  const [selectedSemester, setSelectedSemester] = useState(() => {
+    return localStorage.getItem('selectedSemester') || 'all'
+  })
+  const [semester1Grade, setSemester1Grade] = useState(null)
+  const [semester2Grade, setSemester2Grade] = useState(null)
+  const [courseSemesterGrades, setCourseSemesterGrades] = useState({})
+  const [loadingSemesterGrades, setLoadingSemesterGrades] = useState(false)
+  const hasAppliedInitialSemesterFilter = useRef(false)
+  
+  // Cache for course data to speed up semester calculations
+  const [courseDataCache, setCourseDataCache] = useState(() => {
+    const cached = localStorage.getItem('courseDataCache')
+    return cached ? JSON.parse(cached) : {}
+  })
 
   const presetBackgrounds = [
     { name: 'Network', url: 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=1920&q=80' },
@@ -161,6 +175,343 @@ function App() {
   // Helper function to get display name (custom or original)
   const getDisplayName = (course) => {
     return customCourseNames[course.id] || course.name
+  }
+
+  // Cache management functions
+  const getCachedCourseData = (courseId) => {
+    const cached = courseDataCache[courseId]
+    if (!cached) return null
+    
+    // Check if cache is still valid (24 hours)
+    const cacheAge = Date.now() - cached.timestamp
+    const maxAge = 24 * 60 * 60 * 1000 // 24 hours
+    
+    if (cacheAge > maxAge) {
+      console.log(`Cache expired for course ${courseId}`)
+      return null
+    }
+    
+    console.log(`Using cached data for course ${courseId}`)
+    return cached
+  }
+
+  const setCachedCourseData = (courseId, data) => {
+    const newCache = {
+      ...courseDataCache,
+      [courseId]: {
+        ...data,
+        timestamp: Date.now()
+      }
+    }
+    setCourseDataCache(newCache)
+    localStorage.setItem('courseDataCache', JSON.stringify(newCache))
+  }
+
+  const clearCourseCache = () => {
+    setCourseDataCache({})
+    localStorage.removeItem('courseDataCache')
+    console.log('Course cache cleared')
+  }
+
+  // Determine semester based on assignment due date
+  const getSemester = (dueDate) => {
+    if (!dueDate) return null
+    
+    const date = new Date(dueDate)
+    const month = date.getMonth() + 1 // 0-indexed, so add 1
+    const year = date.getFullYear()
+    
+    // Semester 1: August (8) to December (12)
+    // Semester 2: January (1) to June (6)
+    // Summer: July (7) - treat as semester 2
+    
+    if (month >= 8 && month <= 12) {
+      return 1
+    } else if (month >= 1 && month <= 7) {
+      return 2
+    }
+    
+    return null
+  }
+
+  // Convert score to letter grade using grading scheme
+  const scoreToLetterGrade = (score, gradingScheme) => {
+    if (score === null || score === undefined) {
+      return 'N/A'
+    }
+    
+    console.log('Converting score:', score, 'with grading scheme:', gradingScheme)
+    
+    // If custom grading scheme provided, use it
+    if (gradingScheme && Array.isArray(gradingScheme)) {
+      // Sort by value descending to check from highest to lowest
+      const sortedScheme = [...gradingScheme].sort((a, b) => {
+        const aVal = Array.isArray(a) ? a[1] : a.value
+        const bVal = Array.isArray(b) ? b[1] : b.value
+        return bVal - aVal
+      })
+      
+      console.log('Sorted grading scheme:', sortedScheme)
+      
+      for (const entry of sortedScheme) {
+        let name, threshold
+        
+        // Handle both array format [name, value] and object format {name, value}
+        if (Array.isArray(entry)) {
+          name = entry[0]
+          threshold = entry[1] * 100 // Canvas uses decimal (0.84 = 84%)
+        } else if (entry.name && entry.value !== undefined) {
+          name = entry.name
+          threshold = entry.value * 100
+        } else {
+          continue
+        }
+        
+        console.log(`Checking if ${score} >= ${threshold} for grade ${name}`)
+        
+        if (score >= threshold) {
+          console.log(`Match found: ${name}`)
+          return name
+        }
+      }
+    }
+    
+    console.log('Using default grading scale')
+    
+    // Default grading scale
+    if (score >= 97) return "A+"
+    else if (score >= 93) return "A"
+    else if (score >= 90) return "A-"
+    else if (score >= 87) return "B+"
+    else if (score >= 83) return "B"
+    else if (score >= 80) return "B-"
+    else if (score >= 77) return "C+"
+    else if (score >= 73) return "C"
+    else if (score >= 70) return "C-"
+    else if (score >= 67) return "D+"
+    else if (score >= 63) return "D"
+    else if (score >= 60) return "D-"
+    else return "F"
+  }
+
+  // Filter assignments by semester
+  const filterAssignmentsBySemester = (assignmentsList) => {
+    if (selectedSemester === 'all') {
+      return assignmentsList
+    }
+    
+    return assignmentsList.filter((assignment) => {
+      const dueDate = assignment?.assignment?.due_at
+      if (!dueDate) return true // Include assignments without due dates
+      
+      const semester = getSemester(dueDate)
+      return semester === parseInt(selectedSemester)
+    })
+  }
+
+  // Save semester selection to localStorage
+  const changeSemester = (semester) => {
+    setSelectedSemester(semester)
+    localStorage.setItem('selectedSemester', semester)
+    
+    // If on course detail page, recalculate current grade for the selected semester
+    if (selectedCourse) {
+      recalculateCurrentGrade(semester)
+    }
+    
+    // Update course cards to show semester-specific grades
+    updateCourseGradesForSemester(semester)
+  }
+
+  // Update course grades based on semester selection
+  const updateCourseGradesForSemester = async (semester) => {
+    if (semester === 'all') {
+      // Reset to original grades
+      setLoadingSemesterGrades(true)
+      const response = await fetch('/api/courses', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token, canvasUrl })
+      })
+      
+      if (response.ok) {
+        const data = await response.json()
+        const coursesData = data.courses || data
+        
+        // Maintain course order
+        const savedOrder = localStorage.getItem('courseOrder')
+        if (savedOrder) {
+          try {
+            const orderMap = JSON.parse(savedOrder)
+            const orderedCourses = [...coursesData].sort((a, b) => {
+              const orderA = orderMap[a.id] ?? 999
+              const orderB = orderMap[b.id] ?? 999
+              return orderA - orderB
+            })
+            setCourses(orderedCourses)
+          } catch {
+            setCourses(coursesData)
+          }
+        } else {
+          setCourses(coursesData)
+        }
+      }
+      setLoadingSemesterGrades(false)
+    } else {
+      // Calculate semester-specific grades for each course
+      setLoadingSemesterGrades(true)
+      const updatedCourses = await Promise.all(
+        courses.map(async (course) => {
+          try {
+            // Check cache first
+            const cachedData = getCachedCourseData(course.id)
+            let assignmentsData, groupsData, gradingScheme
+            
+            if (cachedData) {
+              // Use cached data
+              assignmentsData = cachedData.assignments
+              groupsData = cachedData.groups
+              gradingScheme = cachedData.gradingScheme
+              
+              // Check if we have cached semester grade
+              const semesterKey = `semester${semester}`
+              if (cachedData[semesterKey]) {
+                console.log(`Using cached semester ${semester} grade for course ${course.id}`)
+                return {
+                  ...course,
+                  current_score: cachedData[semesterKey].score,
+                  current_grade: cachedData[semesterKey].grade
+                }
+              }
+            } else {
+              // Fetch fresh data
+              const [assignmentsRes, groupsRes, gradingSchemeRes] = await Promise.all([
+                fetch(`/api/course/${course.id}/assignments`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ token, canvasUrl })
+                }),
+                fetch(`/api/course/${course.id}/groups`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ token, canvasUrl })
+                }),
+                fetch(`/api/course/${course.id}/grading-scheme`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ token, canvasUrl })
+                })
+              ])
+              
+              if (!assignmentsRes.ok || !groupsRes.ok) {
+                return course // Return original if fetch fails
+              }
+              
+              assignmentsData = await assignmentsRes.json()
+              groupsData = await groupsRes.json()
+              const gradingSchemeData = await gradingSchemeRes.json()
+              gradingScheme = gradingSchemeData?.grading_scheme
+              
+              // Cache the fetched data
+              setCachedCourseData(course.id, {
+                assignments: assignmentsData,
+                groups: groupsData,
+                gradingScheme: gradingScheme
+              })
+            }
+            
+            // Filter assignments by semester
+            const semesterAssignments = assignmentsData.filter((assignment) => {
+              const dueDate = assignment?.assignment?.due_at
+              if (!dueDate) return true
+              return getSemester(dueDate) === parseInt(semester)
+            })
+            
+            if (semesterAssignments.length === 0) {
+              return { ...course, current_score: null, current_grade: 'N/A' }
+            }
+            
+            // Calculate grade for this semester
+            const gradeRes = await fetch('/api/calculate-grade', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                assignments: semesterAssignments,
+                assignment_groups: groupsData,
+                modifications: {}
+              })
+            })
+            
+            const gradeData = await gradeRes.json()
+            const semesterScore = gradeData.grade
+            
+            // Convert to letter grade using course's grading scheme
+            const letterGrade = scoreToLetterGrade(semesterScore, gradingScheme)
+            
+            // Cache the calculated semester grade
+            const cachedCourseData = getCachedCourseData(course.id) || {}
+            const semesterKey = `semester${semester}`
+            setCachedCourseData(course.id, {
+              ...cachedCourseData,
+              assignments: assignmentsData,
+              groups: groupsData,
+              gradingScheme: gradingScheme,
+              [semesterKey]: {
+                score: semesterScore,
+                grade: letterGrade
+              }
+            })
+            
+            return {
+              ...course,
+              current_score: semesterScore,
+              current_grade: letterGrade
+            }
+          } catch (error) {
+            console.error(`Error calculating semester grade for course ${course.id}:`, error)
+            return course
+          }
+        })
+      )
+      
+      setCourses(updatedCourses)
+      setLoadingSemesterGrades(false)
+    }
+  }
+
+  // Recalculate current grade based on semester selection
+  const recalculateCurrentGrade = async (semester) => {
+    if (!assignments || assignments.length === 0) return
+    
+    try {
+      let filteredAssignments = assignments
+      
+      if (semester !== 'all') {
+        filteredAssignments = assignments.filter((assignment) => {
+          const dueDate = assignment?.assignment?.due_at
+          if (!dueDate) return true // Include assignments without due dates
+          return getSemester(dueDate) === parseInt(semester)
+        })
+      }
+      
+      const response = await fetch('/api/calculate-grade', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          assignments: filteredAssignments,
+          assignment_groups: assignmentGroups,
+          modifications: {}
+        })
+      })
+      
+      const data = await response.json()
+      setCurrentGrade(data.grade)
+      setProjectedGrade(null) // Reset projected grade when changing semesters
+      setModifications({}) // Reset modifications
+      setDroppedAssignments({}) // Reset dropped assignments
+    } catch (err) {
+      console.error('Error recalculating grade:', err)
+    }
   }
 
   // Update custom course name
@@ -227,6 +578,19 @@ function App() {
       changeBackground(backgroundImage)
     }
   }, [])
+
+  // Apply saved semester filter when courses are first loaded
+  useEffect(() => {
+    if (isAuthenticated && courses.length > 0 && !selectedCourse && !hasAppliedInitialSemesterFilter.current) {
+      const savedSemester = localStorage.getItem('selectedSemester')
+      // Only apply if a specific semester was saved
+      if (savedSemester && savedSemester !== 'all') {
+        console.log('Applying saved semester filter on initial load:', savedSemester)
+        hasAppliedInitialSemesterFilter.current = true
+        updateCourseGradesForSemester(savedSemester)
+      }
+    }
+  }, [isAuthenticated, courses.length])
 
   // Detect if device is mobile
   const isMobile = () => {
@@ -495,6 +859,12 @@ function App() {
       
       const gradeData = await gradeRes.json()
       setCurrentGrade(gradeData.grade)
+      
+      // Calculate semester grades after loading assignments
+      // Use a small delay to ensure state is updated
+      setTimeout(() => {
+        calculateSemesterGrades()
+      }, 100)
     } catch (err) {
       setError(err.message)
     } finally {
@@ -596,7 +966,11 @@ function App() {
     try {
       // Filter out dropped assignments and merge hypothetical assignments
       const filteredAssignments = assignments.filter((_, index) => !droppedAssignments[index])
-      const allAssignments = [...filteredAssignments]
+      
+      // Apply semester filter
+      const semesterFilteredAssignments = filterAssignmentsBySemester(filteredAssignments)
+      
+      const allAssignments = [...semesterFilteredAssignments]
       
       Object.entries(hypotheticalAssignments).forEach(([groupId, hypoAssignments]) => {
         hypoAssignments.forEach(hypo => {
@@ -633,6 +1007,59 @@ function App() {
     }
   }
 
+  // Calculate grades for each semester
+  const calculateSemesterGrades = async () => {
+    try {
+      // Calculate Semester 1 grade
+      const semester1Assignments = assignments.filter((assignment) => {
+        const dueDate = assignment?.assignment?.due_at
+        if (!dueDate) return false
+        return getSemester(dueDate) === 1
+      })
+
+      if (semester1Assignments.length > 0) {
+        const response1 = await fetch('/api/calculate-grade', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            assignments: semester1Assignments,
+            assignment_groups: assignmentGroups,
+            modifications: {}
+          })
+        })
+        const data1 = await response1.json()
+        setSemester1Grade(data1.grade)
+      } else {
+        setSemester1Grade(null)
+      }
+
+      // Calculate Semester 2 grade
+      const semester2Assignments = assignments.filter((assignment) => {
+        const dueDate = assignment?.assignment?.due_at
+        if (!dueDate) return false
+        return getSemester(dueDate) === 2
+      })
+
+      if (semester2Assignments.length > 0) {
+        const response2 = await fetch('/api/calculate-grade', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            assignments: semester2Assignments,
+            assignment_groups: assignmentGroups,
+            modifications: {}
+          })
+        })
+        const data2 = await response2.json()
+        setSemester2Grade(data2.grade)
+      } else {
+        setSemester2Grade(null)
+      }
+    } catch (err) {
+      console.error('Error calculating semester grades:', err)
+    }
+  }
+
   const groupedAssignments = () => {
     const grouped = {}
     const groupMap = {}
@@ -642,11 +1069,16 @@ function App() {
       grouped[g.id] = []
     })
     
-    assignments.forEach((s, i) => {
+    // Filter assignments by semester before grouping
+    const filteredAssignments = filterAssignmentsBySemester(assignments)
+    
+    filteredAssignments.forEach((s, i) => {
       const assignment = s.assignment || {}
       const groupId = assignment.assignment_group_id
       if (groupId && grouped[groupId]) {
-        grouped[groupId].push({ ...s, index: i })
+        // Use original index for modifications/drops to work correctly
+        const originalIndex = assignments.indexOf(s)
+        grouped[groupId].push({ ...s, index: originalIndex })
       }
     })
     
@@ -770,6 +1202,7 @@ function App() {
               setIsAuthenticated(false)
               localStorage.removeItem('canvasToken')
               localStorage.removeItem('canvasUrl')
+              clearCourseCache() // Clear cache on logout
               setToken('')
               setCanvasUrl('cuhsd.instructure.com')
             }} className="logout-btn">
@@ -777,6 +1210,45 @@ function App() {
             </button>
           </div>
         </div>
+        
+        {/* Semester Selector for Homepage */}
+        <div className="homepage-semester-selector">
+          <div className="semester-buttons">
+            <button 
+              className={`semester-btn ${selectedSemester === 'all' ? 'active' : ''}`}
+              onClick={() => changeSemester('all')}
+              disabled={loadingSemesterGrades}
+            >
+              All Year
+            </button>
+            <button 
+              className={`semester-btn ${selectedSemester === '1' ? 'active' : ''}`}
+              onClick={() => changeSemester('1')}
+              disabled={loadingSemesterGrades}
+            >
+              Semester 1
+            </button>
+            <button 
+              className={`semester-btn ${selectedSemester === '2' ? 'active' : ''}`}
+              onClick={() => changeSemester('2')}
+              disabled={loadingSemesterGrades}
+            >
+              Semester 2
+            </button>
+          </div>
+          {loadingSemesterGrades && (
+            <p className="semester-note">
+              <span className="loading-spinner-small"></span>
+              Calculating semester grades...
+            </p>
+          )}
+          {!loadingSemesterGrades && selectedSemester !== 'all' && (
+            <p className="semester-note">
+              Showing grades for Semester {selectedSemester} only
+            </p>
+          )}
+        </div>
+        
         {isMobile() ? (
           // On mobile, render course cards without drag-and-drop
           <div className="courses-grid">
@@ -1584,6 +2056,63 @@ function App() {
       {!loading && (
         <>
 
+      {/* Semester Selector */}
+      <div className="semester-selector">
+        <h3>View by Semester</h3>
+        <div className="semester-buttons">
+          <button 
+            className={`semester-btn ${selectedSemester === 'all' ? 'active' : ''}`}
+            onClick={() => changeSemester('all')}
+          >
+            All Year
+          </button>
+          <button 
+            className={`semester-btn ${selectedSemester === '1' ? 'active' : ''}`}
+            onClick={() => changeSemester('1')}
+          >
+            Semester 1
+          </button>
+          <button 
+            className={`semester-btn ${selectedSemester === '2' ? 'active' : ''}`}
+            onClick={() => changeSemester('2')}
+          >
+            Semester 2
+          </button>
+        </div>
+        
+        {/* Semester Grades Display */}
+        {(semester1Grade !== null || semester2Grade !== null) && (
+          <div className="semester-grades">
+            {semester1Grade !== null && (
+              <div className="semester-grade-item">
+                <label>Semester 1 Grade</label>
+                <div className="semester-grade-value">
+                  <CountUp 
+                    from={0} 
+                    to={semester1Grade} 
+                    duration={1}
+                    className="count-up-text"
+                  />%
+                </div>
+              </div>
+            )}
+            {semester2Grade !== null && (
+              <div className="semester-grade-item">
+                <label>Semester 2 Grade</label>
+                <div className="semester-grade-value">
+                  <CountUp 
+                    from={0} 
+                    to={semester2Grade} 
+                    duration={1}
+                    className="count-up-text"
+                  />%
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
       {currentGrade !== null && (
         <div className="grade-summary">
           <div className="grade-box">
@@ -1780,7 +2309,16 @@ function App() {
       </div>
 
       <div className="assignments-section">
-        <h2>What-If Analysis</h2>
+        <div className="assignments-header">
+          <div>
+            <h2>What-If Analysis</h2>
+            {selectedSemester !== 'all' && (
+              <span className="semester-badge">
+                Viewing Semester {selectedSemester}
+              </span>
+            )}
+          </div>
+        </div>
         <p className="hint">Modify assignment scores to see projected grade changes</p>
         <div className="user-tip">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">

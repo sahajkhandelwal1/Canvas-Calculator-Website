@@ -98,7 +98,7 @@ def get_courses():
                     current_score = round(calculated_score, 2)
                     # Convert score to letter grade (basic conversion)
                     if calculated_score >= 97:
-                        current_grade = "A+"
+                        current_grade = "A"
                     elif calculated_score >= 93:
                         current_grade = "A"
                     elif calculated_score >= 90:
@@ -228,6 +228,90 @@ def get_assignment_groups(course_id):
         return jsonify(response.json())
     except requests.exceptions.RequestException as e:
         return jsonify({'error': str(e)}), 500
+
+@app.route('/api/course/<int:course_id>/grading-scheme', methods=['POST'])
+def get_grading_scheme(course_id):
+    token = request.json.get('token')
+    canvas_url = request.json.get('canvasUrl', 'cuhsd.instructure.com')
+    
+    if not token:
+        return jsonify({'error': 'Token required'}), 400
+    
+    BASE_URL = get_base_url(canvas_url)
+    headers = make_headers(token)
+    
+    try:
+        # Try to get the course's grading standard
+        course_url = f"{BASE_URL}/courses/{course_id}?include[]=grading_standard"
+        course_response = requests.get(course_url, headers=headers, timeout=10)
+        
+        if course_response.status_code == 200:
+            course_data = course_response.json()
+            grading_standard = course_data.get('grading_standard')
+            
+            print(f"Grading standard for course {course_id}:", grading_standard)
+            
+            # Canvas grading_standard can be a dict with 'grading_scheme' key or direct array
+            if grading_standard:
+                # If it's a dict, extract the grading_scheme array
+                if isinstance(grading_standard, dict):
+                    scheme = grading_standard.get('grading_scheme', grading_standard)
+                else:
+                    scheme = grading_standard
+                
+                print(f"Processed grading scheme:", scheme)
+                return jsonify({'grading_scheme': scheme})
+        
+        # If no custom grading standard, return default
+        print(f"No custom grading standard for course {course_id}, using default")
+        return jsonify({'grading_scheme': None})
+        
+    except requests.exceptions.RequestException as e:
+        print(f"Error fetching grading scheme: {e}")
+        return jsonify({'error': str(e)}), 500
+
+def score_to_letter_grade(score, grading_scheme=None):
+    """Convert a percentage score to a letter grade using the grading scheme"""
+    if score is None:
+        return None
+    
+    # If custom grading scheme provided, use it
+    if grading_scheme and isinstance(grading_scheme, list):
+        for entry in grading_scheme:
+            if isinstance(entry, dict):
+                name = entry.get('name', '')
+                value = entry.get('value', 0)
+                # Canvas grading schemes use decimal values (0.9 = 90%)
+                if score >= (value * 100):
+                    return name
+    
+    # Default grading scale
+    if score >= 97:
+        return "A+"
+    elif score >= 93:
+        return "A"
+    elif score >= 90:
+        return "A-"
+    elif score >= 87:
+        return "B+"
+    elif score >= 83:
+        return "B"
+    elif score >= 80:
+        return "B-"
+    elif score >= 77:
+        return "C+"
+    elif score >= 73:
+        return "C"
+    elif score >= 70:
+        return "C-"
+    elif score >= 67:
+        return "D+"
+    elif score >= 63:
+        return "D"
+    elif score >= 60:
+        return "D-"
+    else:
+        return "F"
 
 @app.route('/api/calculate-grade', methods=['POST'])
 def calculate_grade():
