@@ -500,15 +500,23 @@ function App() {
         body: JSON.stringify({
           assignments: filteredAssignments,
           assignment_groups: assignmentGroups,
-          modifications: {}
+          modifications: {} // Use empty modifications for current grade baseline
         })
       })
       
       const data = await response.json()
       setCurrentGrade(data.grade)
-      setProjectedGrade(null) // Reset projected grade when changing semesters
-      setModifications({}) // Reset modifications
-      setDroppedAssignments({}) // Reset dropped assignments
+      
+      // Don't reset modifications, dropped assignments, or projected grade
+      // Let the user keep their what-if changes when switching semesters
+      
+      // If there are modifications, recalculate projected grade for the new semester
+      if (Object.keys(modifications).length > 0 || Object.keys(droppedAssignments).length > 0 || Object.keys(hypotheticalAssignments).length > 0) {
+        // Trigger a recalculation of projected grade with current modifications
+        setTimeout(() => {
+          calculateProjectedGrade()
+        }, 100)
+      }
     } catch (err) {
       console.error('Error recalculating grade:', err)
     }
@@ -1000,6 +1008,9 @@ function App() {
       const data = await response.json()
       setProjectedGrade(data.grade)
       setShowCalculatePrompt(false) // Hide prompt after successful calculation
+      
+      // Also recalculate semester grades with modifications
+      calculateSemesterGrades()
     } catch (err) {
       setError(err.message)
     } finally {
@@ -1017,14 +1028,48 @@ function App() {
         return getSemester(dueDate) === 1
       })
 
-      if (semester1Assignments.length > 0) {
+      // Filter out dropped assignments for semester 1
+      const semester1FilteredAssignments = semester1Assignments.filter((_, index) => {
+        const originalIndex = assignments.indexOf(semester1Assignments[index])
+        return !droppedAssignments[originalIndex]
+      })
+
+      // Add hypothetical assignments for semester 1
+      const semester1WithHypotheticals = [...semester1FilteredAssignments]
+      Object.entries(hypotheticalAssignments).forEach(([groupId, hypoAssignments]) => {
+        hypoAssignments.forEach(hypo => {
+          if (hypo.score !== '' && hypo.pointsPossible !== '') {
+            semester1WithHypotheticals.push({
+              assignment: {
+                assignment_group_id: parseInt(groupId),
+                points_possible: parseFloat(hypo.pointsPossible),
+                name: hypo.name || 'Hypothetical Assignment',
+                due_at: new Date(new Date().getFullYear(), 8, 1).toISOString() // Default to Sept 1 (Semester 1)
+              },
+              score: parseFloat(hypo.score)
+            })
+          }
+        })
+      })
+
+      if (semester1WithHypotheticals.length > 0) {
+        // Create modifications map with original indices for semester 1
+        const semester1Modifications = {}
+        semester1Assignments.forEach((assignment, semesterIndex) => {
+          const originalIndex = assignments.indexOf(assignment)
+          if (modifications[originalIndex] !== undefined) {
+            semesterIndex // Use semester index for the filtered array
+            semester1Modifications[semesterIndex] = modifications[originalIndex]
+          }
+        })
+
         const response1 = await fetch('/api/calculate-grade', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            assignments: semester1Assignments,
+            assignments: semester1WithHypotheticals,
             assignment_groups: assignmentGroups,
-            modifications: {}
+            modifications: semester1Modifications
           })
         })
         const data1 = await response1.json()
@@ -1040,14 +1085,47 @@ function App() {
         return getSemester(dueDate) === 2
       })
 
-      if (semester2Assignments.length > 0) {
+      // Filter out dropped assignments for semester 2
+      const semester2FilteredAssignments = semester2Assignments.filter((_, index) => {
+        const originalIndex = assignments.indexOf(semester2Assignments[index])
+        return !droppedAssignments[originalIndex]
+      })
+
+      // Add hypothetical assignments for semester 2
+      const semester2WithHypotheticals = [...semester2FilteredAssignments]
+      Object.entries(hypotheticalAssignments).forEach(([groupId, hypoAssignments]) => {
+        hypoAssignments.forEach(hypo => {
+          if (hypo.score !== '' && hypo.pointsPossible !== '') {
+            semester2WithHypotheticals.push({
+              assignment: {
+                assignment_group_id: parseInt(groupId),
+                points_possible: parseFloat(hypo.pointsPossible),
+                name: hypo.name || 'Hypothetical Assignment',
+                due_at: new Date(new Date().getFullYear(), 1, 1).toISOString() // Default to Feb 1 (Semester 2)
+              },
+              score: parseFloat(hypo.score)
+            })
+          }
+        })
+      })
+
+      if (semester2WithHypotheticals.length > 0) {
+        // Create modifications map with original indices for semester 2
+        const semester2Modifications = {}
+        semester2Assignments.forEach((assignment, semesterIndex) => {
+          const originalIndex = assignments.indexOf(assignment)
+          if (modifications[originalIndex] !== undefined) {
+            semester2Modifications[semesterIndex] = modifications[originalIndex]
+          }
+        })
+
         const response2 = await fetch('/api/calculate-grade', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            assignments: semester2Assignments,
+            assignments: semester2WithHypotheticals,
             assignment_groups: assignmentGroups,
-            modifications: {}
+            modifications: semester2Modifications
           })
         })
         const data2 = await response2.json()
@@ -2133,7 +2211,11 @@ function App() {
                 <div className="grade-value">
                   <CountUp 
                     from={currentGrade} 
-                    to={projectedGrade} 
+                    to={
+                      selectedSemester === '1' && semester1Grade !== null ? semester1Grade :
+                      selectedSemester === '2' && semester2Grade !== null ? semester2Grade :
+                      projectedGrade
+                    } 
                     duration={1}
                     className="count-up-text"
                   />%
@@ -2141,11 +2223,23 @@ function App() {
               </div>
               <div className="grade-box">
                 <label>Change</label>
-                <div className={`grade-value ${projectedGrade - currentGrade >= 0 ? 'positive' : 'negative'}`}>
-                  {(projectedGrade - currentGrade >= 0 ? '+' : '')}
+                <div className={`grade-value ${
+                  (selectedSemester === '1' && semester1Grade !== null ? semester1Grade :
+                   selectedSemester === '2' && semester2Grade !== null ? semester2Grade :
+                   projectedGrade) - currentGrade >= 0 ? 'positive' : 'negative'
+                }`}>
+                  {(
+                    (selectedSemester === '1' && semester1Grade !== null ? semester1Grade :
+                     selectedSemester === '2' && semester2Grade !== null ? semester2Grade :
+                     projectedGrade) - currentGrade >= 0 ? '+' : ''
+                  )}
                   <CountUp 
                     from={0} 
-                    to={Math.abs(projectedGrade - currentGrade)} 
+                    to={Math.abs(
+                      (selectedSemester === '1' && semester1Grade !== null ? semester1Grade :
+                       selectedSemester === '2' && semester2Grade !== null ? semester2Grade :
+                       projectedGrade) - currentGrade
+                    )} 
                     duration={1}
                     className="count-up-text"
                   />%
