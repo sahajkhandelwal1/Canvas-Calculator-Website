@@ -129,7 +129,11 @@ def get_courses():
                 'current_grade': current_grade
             })
         
-        print(f"✅ Loaded {len(result)} courses")
+        # Print course summary (without grades for privacy)
+        print(f"📚 Courses loaded:")
+        for course in result:
+            print(f"   • {course['name']}")
+        print(f"{'='*60}\n")
         
         # Include user info in response
         response_data = {
@@ -148,6 +152,8 @@ def get_assignments(course_id):
     
     if not token:
         return jsonify({'error': 'Token required'}), 400
+    
+    print(f"📖 Loading assignments for course ID: {course_id}")
     
     BASE_URL = get_base_url(canvas_url)
     headers = make_headers(token)
@@ -200,6 +206,7 @@ def get_assignments(course_id):
             else:
                 url = None
         
+        print(f"   ✓ Loaded {len(assignments)} assignments")
         return jsonify(assignments)
     except requests.exceptions.RequestException as e:
         return jsonify({'error': f'Failed to load course data: {str(e)}'}), 500
@@ -313,6 +320,11 @@ def calculate_grade():
     modifications = {int(k): v for k, v in modifications.items()}
     
     grade = calculate_grade_logic(assignments, assignment_groups, modifications)
+    
+    # Log grade calculations (without showing the actual grade for privacy)
+    if modifications:
+        print(f"🧮 Calculated projected grade with {len(modifications)} modifications")
+    
     return jsonify({'grade': grade})
 
 @app.route('/api/upcoming-assignments', methods=['POST'])
@@ -322,6 +334,8 @@ def get_upcoming_assignments():
     
     if not token:
         return jsonify({'error': 'Token required'}), 400
+    
+    print(f"📅 Fetching upcoming assignments...")
     
     BASE_URL = get_base_url(canvas_url)
     headers = make_headers(token)
@@ -346,15 +360,38 @@ def get_upcoming_assignments():
             course_upcoming = []
             
             try:
-                # Get assignments for this course
+                # Get assignments with submission status
                 assignments_url = f"{BASE_URL}/courses/{course_id}/assignments?per_page=50"
-                assignments_response = requests.get(assignments_url, headers=headers, timeout=5)
+                submissions_url = f"{BASE_URL}/courses/{course_id}/students/submissions?student_ids[]={USER_ID}&per_page=50"
                 
-                if assignments_response.status_code == 200:
+                assignments_response = requests.get(assignments_url, headers=headers, timeout=5)
+                submissions_response = requests.get(submissions_url, headers=headers, timeout=5)
+                
+                if assignments_response.status_code == 200 and submissions_response.status_code == 200:
                     assignments = assignments_response.json()
+                    submissions = submissions_response.json()
+                    
+                    # Create a map of assignment_id to submission status
+                    submission_map = {}
+                    for submission in submissions:
+                        assignment_id = submission.get('assignment_id')
+                        workflow_state = submission.get('workflow_state')
+                        score = submission.get('score')
+                        
+                        # Consider assignment completed if:
+                        # 1. It has been graded (score is not None)
+                        # 2. It has been submitted (workflow_state is 'submitted' or 'graded')
+                        is_completed = (score is not None) or (workflow_state in ['submitted', 'graded', 'pending_review'])
+                        submission_map[assignment_id] = is_completed
                     
                     for assignment in assignments:
+                        assignment_id = assignment.get('id')
                         due_at = assignment.get('due_at')
+                        
+                        # Skip if assignment is completed/graded
+                        if submission_map.get(assignment_id, False):
+                            continue
+                        
                         if due_at:
                             try:
                                 due_date = datetime.fromisoformat(due_at.replace('Z', '+00:00'))
@@ -384,6 +421,8 @@ def get_upcoming_assignments():
         # Sort by due date
         upcoming.sort(key=lambda x: datetime.fromisoformat(x['due_at'].replace('Z', '+00:00')))
         
+        print(f"   ✓ Found {len(upcoming)} upcoming assignments")
+        
         return jsonify(upcoming[:10])  # Return top 10 upcoming
     except requests.exceptions.RequestException as e:
         return jsonify({'error': str(e)}), 500
@@ -395,6 +434,8 @@ def get_overdue_assignments():
     
     if not token:
         return jsonify({'error': 'Token required'}), 400
+    
+    print(f"⚠️  Fetching overdue assignments...")
     
     BASE_URL = get_base_url(canvas_url)
     headers = make_headers(token)
@@ -419,16 +460,38 @@ def get_overdue_assignments():
             course_overdue = []
             
             try:
-                # Get assignments for this course
+                # Get assignments with submission status
                 assignments_url = f"{BASE_URL}/courses/{course_id}/assignments?per_page=50"
-                assignments_response = requests.get(assignments_url, headers=headers, timeout=5)
+                submissions_url = f"{BASE_URL}/courses/{course_id}/students/submissions?student_ids[]={USER_ID}&per_page=50"
                 
-                if assignments_response.status_code == 200:
+                assignments_response = requests.get(assignments_url, headers=headers, timeout=5)
+                submissions_response = requests.get(submissions_url, headers=headers, timeout=5)
+                
+                if assignments_response.status_code == 200 and submissions_response.status_code == 200:
                     assignments = assignments_response.json()
+                    submissions = submissions_response.json()
+                    
+                    # Create a map of assignment_id to submission status
+                    submission_map = {}
+                    for submission in submissions:
+                        assignment_id = submission.get('assignment_id')
+                        workflow_state = submission.get('workflow_state')
+                        score = submission.get('score')
+                        
+                        # Consider assignment completed if:
+                        # 1. It has been graded (score is not None)
+                        # 2. It has been submitted (workflow_state is 'submitted' or 'graded')
+                        is_completed = (score is not None) or (workflow_state in ['submitted', 'graded', 'pending_review'])
+                        submission_map[assignment_id] = is_completed
                     
                     for assignment in assignments:
+                        assignment_id = assignment.get('id')
                         due_at = assignment.get('due_at')
                         lock_at = assignment.get('lock_at')
+                        
+                        # Skip if assignment is completed/graded
+                        if submission_map.get(assignment_id, False):
+                            continue
                         
                         if due_at:
                             try:
@@ -467,6 +530,8 @@ def get_overdue_assignments():
         
         # Sort by due date (most recently overdue first)
         overdue.sort(key=lambda x: datetime.fromisoformat(x['due_at'].replace('Z', '+00:00')), reverse=True)
+        
+        print(f"   ✓ Found {len(overdue)} overdue assignments")
         
         return jsonify(overdue[:15])  # Return top 15 overdue
     except requests.exceptions.RequestException as e:
@@ -650,5 +715,11 @@ Message:
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
+    import logging
+    
+    # Disable Flask's default request logging
+    log = logging.getLogger('werkzeug')
+    log.setLevel(logging.ERROR)
+    
     port = int(os.environ.get('PORT', 5001))
     app.run(debug=False, host='0.0.0.0', port=port)

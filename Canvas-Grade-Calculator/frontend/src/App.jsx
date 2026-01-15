@@ -99,6 +99,10 @@ function App() {
   const [overdueAssignments, setOverdueAssignments] = useState([])
   const [loadingOverdue, setLoadingOverdue] = useState(false)
   const [assignmentsTab, setAssignmentsTab] = useState('upcoming')
+  const [completedAssignments, setCompletedAssignments] = useState(() => {
+    const saved = localStorage.getItem('completedAssignments')
+    return saved ? JSON.parse(saved) : {}
+  })
   const [hypotheticalAssignments, setHypotheticalAssignments] = useState({})
   const [showSlowLoadingMessage, setShowSlowLoadingMessage] = useState(false)
   const [loadingProgress, setLoadingProgress] = useState(0)
@@ -977,6 +981,20 @@ function App() {
     }
   }
 
+  // Toggle assignment completion
+  const toggleAssignmentCompletion = (assignmentUrl) => {
+    setCompletedAssignments(prev => {
+      const newCompleted = { ...prev }
+      if (newCompleted[assignmentUrl]) {
+        delete newCompleted[assignmentUrl]
+      } else {
+        newCompleted[assignmentUrl] = true
+      }
+      localStorage.setItem('completedAssignments', JSON.stringify(newCompleted))
+      return newCompleted
+    })
+  }
+
   const handleModification = (index, value) => {
     const newMods = { ...modifications }
     if (value === '' || value === null) {
@@ -1458,13 +1476,13 @@ function App() {
                 className={`tab-btn ${assignmentsTab === 'upcoming' ? 'active' : ''}`}
                 onClick={() => setAssignmentsTab('upcoming')}
               >
-                📋 Upcoming ({upcomingAssignments.length})
+                📋 Upcoming ({upcomingAssignments.filter(a => !completedAssignments[a.html_url]).length})
               </button>
               <button 
                 className={`tab-btn ${assignmentsTab === 'overdue' ? 'active' : ''}`}
                 onClick={() => setAssignmentsTab('overdue')}
               >
-                ⚠️ Overdue ({overdueAssignments.length})
+                ⚠️ Overdue ({overdueAssignments.filter(a => !completedAssignments[a.html_url]).length})
               </button>
             </div>
 
@@ -1479,14 +1497,32 @@ function App() {
                   )}
                   {!loadingUpcoming && upcomingAssignments.length > 0 && (
                     <div className="assignments-list">
-                      {upcomingAssignments.map((assignment, index) => {
+                      {upcomingAssignments
+                        .sort((a, b) => {
+                          // Sort completed assignments to bottom
+                          const aCompleted = completedAssignments[a.html_url] || false
+                          const bCompleted = completedAssignments[b.html_url] || false
+                          if (aCompleted && !bCompleted) return 1
+                          if (!aCompleted && bCompleted) return -1
+                          // Otherwise sort by due date
+                          return new Date(a.due_at) - new Date(b.due_at)
+                        })
+                        .map((assignment, index) => {
                         const dueDate = new Date(assignment.due_at)
                         const now = new Date()
                         const daysUntil = Math.ceil((dueDate - now) / (1000 * 60 * 60 * 24))
                         const isUrgent = daysUntil <= 2
+                        const isCompleted = completedAssignments[assignment.html_url] || false
                         
                         return (
-                          <div key={index} className={`assignment-item ${isUrgent ? 'urgent' : ''}`}>
+                          <div key={index} className={`assignment-item ${isUrgent ? 'urgent' : ''} ${isCompleted ? 'completed' : ''}`}>
+                            <label className="assignment-checkbox" onClick={(e) => e.stopPropagation()}>
+                              <input
+                                type="checkbox"
+                                checked={isCompleted}
+                                onChange={() => toggleAssignmentCompletion(assignment.html_url)}
+                              />
+                            </label>
                             <div className="assignment-info">
                               <div className="assignment-course">{assignment.course_name}</div>
                               <div className="assignment-name">{assignment.assignment_name}</div>
@@ -1527,14 +1563,32 @@ function App() {
                   )}
                   {!loadingOverdue && overdueAssignments.length > 0 && (
                     <div className="assignments-list">
-                      {overdueAssignments.map((assignment, index) => {
+                      {overdueAssignments
+                        .sort((a, b) => {
+                          // Sort completed assignments to bottom
+                          const aCompleted = completedAssignments[a.html_url] || false
+                          const bCompleted = completedAssignments[b.html_url] || false
+                          if (aCompleted && !bCompleted) return 1
+                          if (!aCompleted && bCompleted) return -1
+                          // Otherwise sort by due date (most recent first)
+                          return new Date(b.due_at) - new Date(a.due_at)
+                        })
+                        .map((assignment, index) => {
                         const dueDate = new Date(assignment.due_at)
                         const lockDate = assignment.lock_at ? new Date(assignment.lock_at) : null
                         const now = new Date()
                         const isLocked = assignment.is_locked
+                        const isCompleted = completedAssignments[assignment.html_url] || false
                         
                         return (
-                          <div key={index} className={`assignment-item overdue ${isLocked ? 'locked' : ''}`}>
+                          <div key={index} className={`assignment-item overdue ${isLocked ? 'locked' : ''} ${isCompleted ? 'completed' : ''}`}>
+                            <label className="assignment-checkbox" onClick={(e) => e.stopPropagation()}>
+                              <input
+                                type="checkbox"
+                                checked={isCompleted}
+                                onChange={() => toggleAssignmentCompletion(assignment.html_url)}
+                              />
+                            </label>
                             <div className="assignment-info">
                               <div className="assignment-course">{assignment.course_name}</div>
                               <div className="assignment-name">

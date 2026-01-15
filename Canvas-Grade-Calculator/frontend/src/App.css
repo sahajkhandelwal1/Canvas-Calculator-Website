@@ -2014,6 +2014,7 @@
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 12px;
   transition: all 0.3s ease;
+  gap: 1rem;
 }
 
 .assignment-item:hover {
@@ -2036,6 +2037,37 @@
   border-color: rgba(107, 114, 128, 0.5);
   background: rgba(107, 114, 128, 0.1);
   opacity: 0.7;
+}
+
+.assignment-item.completed {
+  opacity: 0.6;
+  background: rgba(34, 197, 94, 0.05);
+  border-color: rgba(34, 197, 94, 0.3);
+}
+
+.assignment-item.completed .assignment-name {
+  text-decoration: line-through;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.assignment-item.completed .assignment-course,
+.assignment-item.completed .assignment-meta {
+  opacity: 0.7;
+}
+
+.assignment-checkbox {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.assignment-checkbox input[type="checkbox"] {
+  cursor: pointer;
+  width: 20px;
+  height: 20px;
+  accent-color: #22c55e;
+  border-radius: 4px;
 }
 
 .assignment-info {
