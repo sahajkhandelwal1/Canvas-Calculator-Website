@@ -130,9 +130,7 @@ function App() {
   const [showCalculatePrompt, setShowCalculatePrompt] = useState(false)
   const [selectedAssignmentDetail, setSelectedAssignmentDetail] = useState(null)
   const [showAssignmentDetail, setShowAssignmentDetail] = useState(false)
-  const [selectedSemester, setSelectedSemester] = useState(() => {
-    return localStorage.getItem('selectedSemester') || 'all'
-  })
+  const [selectedSemester, setSelectedSemester] = useState('all')
   const [semester1Grade, setSemester1Grade] = useState(null)
   const [semester2Grade, setSemester2Grade] = useState(null)
   const [courseSemesterGrades, setCourseSemesterGrades] = useState({})
@@ -297,18 +295,18 @@ function App() {
     })
   }
 
-  // Save semester selection to localStorage
+  // Save semester selection to localStorage (but don't use it as default)
   const changeSemester = (semester) => {
     setSelectedSemester(semester)
-    localStorage.setItem('selectedSemester', semester)
+    // Note: We no longer save to localStorage to always default to 'all'
     
     // If on course detail page, recalculate current grade for the selected semester
     if (selectedCourse) {
       recalculateCurrentGrade(semester)
     }
     
-    // Update course cards to show semester-specific grades
-    updateCourseGradesForSemester(semester)
+    // Note: Homepage no longer updates course grades based on semester
+    // It always shows all-year grades for better performance
   }
 
   // Update course grades based on semester selection
@@ -569,14 +567,8 @@ function App() {
 
   // Apply saved semester filter when courses are first loaded
   useEffect(() => {
-    if (isAuthenticated && courses.length > 0 && !selectedCourse && !hasAppliedInitialSemesterFilter.current) {
-      const savedSemester = localStorage.getItem('selectedSemester')
-      // Only apply if a specific semester was saved
-      if (savedSemester && savedSemester !== 'all') {
-        hasAppliedInitialSemesterFilter.current = true
-        updateCourseGradesForSemester(savedSemester)
-      }
-    }
+    // Homepage no longer applies semester filters automatically for better performance
+    // Semester filtering is only available on individual course pages
   }, [isAuthenticated, courses.length])
 
   // Detect if device is mobile
@@ -791,6 +783,9 @@ function App() {
     setProjectedGrade(null)
     setHypotheticalAssignments({})
     setSelectedCourse({ id: courseId, name: 'Loading...', loading: true })
+    
+    // Reset semester selection to 'all' when loading a new course
+    setSelectedSemester('all')
     
     // Get course name for logging
     const courseName = courses.find(c => c.id === courseId)?.name || 'Unknown Course'
@@ -1270,42 +1265,16 @@ function App() {
           </div>
         </div>
         
-        {/* Semester Selector for Homepage */}
-        <div className="homepage-semester-selector">
-          <div className="semester-buttons">
-            <button 
-              className={`semester-btn ${selectedSemester === 'all' ? 'active' : ''}`}
-              onClick={() => changeSemester('all')}
-              disabled={loadingSemesterGrades}
-            >
-              All Year
-            </button>
-            <button 
-              className={`semester-btn ${selectedSemester === '1' ? 'active' : ''}`}
-              onClick={() => changeSemester('1')}
-              disabled={loadingSemesterGrades}
-            >
-              Semester 1
-            </button>
-            <button 
-              className={`semester-btn ${selectedSemester === '2' ? 'active' : ''}`}
-              onClick={() => changeSemester('2')}
-              disabled={loadingSemesterGrades}
-            >
-              Semester 2
-            </button>
+        {/* Tip Bar for Semester Data */}
+        <div className="semester-tip-bar">
+          <div className="tip-content">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="12" cy="12" r="10"/>
+              <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
+              <line x1="12" y1="17" x2="12.01" y2="17"/>
+            </svg>
+            <span>💡 Tip: Click on any course to view semester-specific grades and detailed analysis</span>
           </div>
-          {loadingSemesterGrades && (
-            <p className="semester-note">
-              <span className="loading-spinner-small"></span>
-              Calculating semester grades...
-            </p>
-          )}
-          {!loadingSemesterGrades && selectedSemester !== 'all' && (
-            <p className="semester-note">
-              Showing grades for Semester {selectedSemester} only
-            </p>
-          )}
         </div>
         
         {isMobile() ? (
