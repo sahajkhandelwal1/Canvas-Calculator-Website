@@ -55,7 +55,45 @@ def get_courses():
         
         result = []
         
-        # Helper function to calculate grade for a course
+        # Helper function to get Semester 2 grade from Canvas
+        def get_semester2_grade(course_id):
+            try:
+                # Step 1: Get grading periods for this course
+                grading_periods_url = f"{BASE_URL}/courses/{course_id}/grading_periods"
+                periods_response = requests.get(grading_periods_url, headers=headers, timeout=10)
+                
+                if periods_response.status_code == 200:
+                    periods_data = periods_response.json()
+                    grading_periods = periods_data.get('grading_periods', [])
+                    
+                    # Find Semester 2 grading period
+                    semester2_period_id = None
+                    for period in grading_periods:
+                        title = period.get('title', '').lower()
+                        if 'semester 2' in title or 'spring' in title or 'second semester' in title:
+                            semester2_period_id = period.get('id')
+                            break
+                    
+                    if semester2_period_id:
+                        # Step 2: Get enrollment with Semester 2 grade
+                        enrollment_url = f"{BASE_URL}/courses/{course_id}/enrollments?user_id={USER_ID}&grading_period_id={semester2_period_id}"
+                        enrollment_response = requests.get(enrollment_url, headers=headers, timeout=10)
+                        
+                        if enrollment_response.status_code == 200:
+                            enrollments = enrollment_response.json()
+                            if enrollments and len(enrollments) > 0:
+                                grades = enrollments[0].get('grades', {})
+                                return {
+                                    'score': grades.get('current_score'),
+                                    'grade': grades.get('current_grade')
+                                }
+                
+            except Exception as e:
+                pass
+            
+            return None
+        
+        # Helper function to calculate grade for a course (fallback)
         def calculate_course_grade(course_id):
             try:
                 # Get assignments and assignment groups for this course
@@ -83,44 +121,50 @@ def get_courses():
             current_score = None
             current_grade = None
             
-            # First try to get grade from Canvas enrollment data
-            for e in enrollments:
-                if "computed_current_score" in e:
-                    current_score = e["computed_current_score"]
-                    current_grade = e["computed_current_grade"]
-            
-            # If no grade available (locked), calculate it manually
-            if current_score is None:
-                calculated_score = calculate_course_grade(course.get('id'))
-                if calculated_score is not None:
-                    current_score = round(calculated_score, 2)
-                    # Convert score to letter grade (basic conversion)
-                    if calculated_score >= 97:
-                        current_grade = "A"
-                    elif calculated_score >= 93:
-                        current_grade = "A"
-                    elif calculated_score >= 90:
-                        current_grade = "A-"
-                    elif calculated_score >= 87:
-                        current_grade = "B+"
-                    elif calculated_score >= 83:
-                        current_grade = "B"
-                    elif calculated_score >= 80:
-                        current_grade = "B-"
-                    elif calculated_score >= 77:
-                        current_grade = "C+"
-                    elif calculated_score >= 73:
-                        current_grade = "C"
-                    elif calculated_score >= 70:
-                        current_grade = "C-"
-                    elif calculated_score >= 67:
-                        current_grade = "D+"
-                    elif calculated_score >= 63:
-                        current_grade = "D"
-                    elif calculated_score >= 60:
-                        current_grade = "D-"
-                    else:
-                        current_grade = "F"
+            # Try to get Semester 2 grade from Canvas first
+            semester2_data = get_semester2_grade(course.get('id'))
+            if semester2_data and semester2_data['score'] is not None:
+                current_score = semester2_data['score']
+                current_grade = semester2_data['grade']
+            else:
+                # Fallback to enrollment data or manual calculation
+                for e in enrollments:
+                    if "computed_current_score" in e:
+                        current_score = e["computed_current_score"]
+                        current_grade = e["computed_current_grade"]
+                
+                # If still no grade available (locked), calculate it manually
+                if current_score is None:
+                    calculated_score = calculate_course_grade(course.get('id'))
+                    if calculated_score is not None:
+                        current_score = round(calculated_score, 2)
+                        # Convert score to letter grade (basic conversion)
+                        if calculated_score >= 97:
+                            current_grade = "A"
+                        elif calculated_score >= 93:
+                            current_grade = "A"
+                        elif calculated_score >= 90:
+                            current_grade = "A-"
+                        elif calculated_score >= 87:
+                            current_grade = "B+"
+                        elif calculated_score >= 83:
+                            current_grade = "B"
+                        elif calculated_score >= 80:
+                            current_grade = "B-"
+                        elif calculated_score >= 77:
+                            current_grade = "C+"
+                        elif calculated_score >= 73:
+                            current_grade = "C"
+                        elif calculated_score >= 70:
+                            current_grade = "C-"
+                        elif calculated_score >= 67:
+                            current_grade = "D+"
+                        elif calculated_score >= 63:
+                            current_grade = "D"
+                        elif calculated_score >= 60:
+                            current_grade = "D-"
+                        else:
+                            current_grade = "F"
             
             result.append({
                 'id': course.get('id'),
