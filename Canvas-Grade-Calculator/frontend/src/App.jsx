@@ -110,6 +110,7 @@ function App() {
   const [showFeedback, setShowFeedback] = useState(false)
   const [feedbackText, setFeedbackText] = useState('')
   const [feedbackSubmitted, setFeedbackSubmitted] = useState(false)
+  const [feedbackLoading, setFeedbackLoading] = useState(false)
   const [showBgCustomizer, setShowBgCustomizer] = useState(false)
   const [hiddenCourses, setHiddenCourses] = useState(() => {
     const saved = localStorage.getItem('hiddenCourses')
@@ -1972,7 +1973,8 @@ function App() {
                     </button>
                     <button 
                       onClick={async () => {
-                        if (feedbackText.trim()) {
+                        if (feedbackText.trim() && !feedbackLoading) {
+                          setFeedbackLoading(true)
                           try {
                             const response = await fetch('/api/feedback', {
                               method: 'POST',
@@ -1990,20 +1992,23 @@ function App() {
                                 setShowFeedback(false)
                                 setFeedbackSubmitted(false)
                                 setFeedbackText('')
+                                setFeedbackLoading(false)
                               }, 2000)
                             } else {
                               alert('Failed to send feedback. Please try again.')
+                              setFeedbackLoading(false)
                             }
                           } catch (error) {
                             console.error('Error sending feedback:', error)
                             alert('Failed to send feedback. Please try again.')
+                            setFeedbackLoading(false)
                           }
                         }
                       }}
                       className="submit-btn"
-                      disabled={!feedbackText.trim()}
+                      disabled={!feedbackText.trim() || feedbackLoading}
                     >
-                      Send Feedback
+                      {feedbackLoading ? 'Sending...' : 'Send Feedback'}
                     </button>
                   </div>
                 </>
