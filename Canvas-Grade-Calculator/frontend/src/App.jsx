@@ -135,7 +135,7 @@ function App() {
   const [showCalculatePrompt, setShowCalculatePrompt] = useState(false)
   const [selectedAssignmentDetail, setSelectedAssignmentDetail] = useState(null)
   const [showAssignmentDetail, setShowAssignmentDetail] = useState(false)
-  const [selectedSemester, setSelectedSemester] = useState('all')
+  const [selectedSemester, setSelectedSemester] = useState('2')
   const [semester1Grade, setSemester1Grade] = useState(null)
   const [semester2Grade, setSemester2Grade] = useState(null)
   const [courseSemesterGrades, setCourseSemesterGrades] = useState({})
@@ -789,8 +789,8 @@ function App() {
     setHypotheticalAssignments({})
     setSelectedCourse({ id: courseId, name: 'Loading...', loading: true })
     
-    // Reset semester selection to 'all' when loading a new course
-    setSelectedSemester('all')
+    // Reset semester selection to Semester 2 when loading a new course
+    setSelectedSemester('2')
     
     // Reset semester grades when switching courses
     setSemester1Grade(null)
@@ -840,11 +840,18 @@ function App() {
       setAssignmentGroups(groupsData)
       setSelectedCourse(courses.find(c => c.id === courseId))
       
+      // Calculate current grade for Semester 2 (since that's our default)
+      const semester2Assignments = assignmentsData.filter((assignment) => {
+        const dueDate = assignment?.assignment?.due_at
+        if (!dueDate) return true // Include assignments without due dates
+        return getSemester(dueDate) === 2
+      })
+      
       const gradeRes = await fetch('/api/calculate-grade', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          assignments: assignmentsData,
+          assignments: semester2Assignments,
           assignment_groups: groupsData,
           modifications: {}
         })
@@ -994,6 +1001,15 @@ function App() {
       localStorage.setItem('completedAssignments', JSON.stringify(newCompleted))
       return newCompleted
     })
+  }
+
+  // Reset all what-if changes
+  const resetAllChanges = () => {
+    setModifications({})
+    setDroppedAssignments({})
+    setHypotheticalAssignments({})
+    setProjectedGrade(null)
+    setShowCalculatePrompt(false)
   }
 
   const handleModification = (index, value) => {
@@ -2764,13 +2780,22 @@ function App() {
           )
         })}
 
-        <button 
-          onClick={calculateProjectedGrade} 
-          disabled={loading || (Object.keys(modifications).length === 0 && Object.keys(hypotheticalAssignments).length === 0 && Object.keys(droppedAssignments).length === 0)}
-          className="calculate-btn"
-        >
-          {loading ? 'Calculating...' : 'Calculate Projected Grade'}
-        </button>
+        <div className="calculate-actions">
+          <button 
+            onClick={resetAllChanges}
+            className="reset-btn"
+            disabled={Object.keys(modifications).length === 0 && Object.keys(droppedAssignments).length === 0 && Object.keys(hypotheticalAssignments).length === 0}
+          >
+            Reset All Changes
+          </button>
+          <button 
+            onClick={calculateProjectedGrade} 
+            disabled={loading || (Object.keys(modifications).length === 0 && Object.keys(hypotheticalAssignments).length === 0 && Object.keys(droppedAssignments).length === 0)}
+            className="calculate-btn"
+          >
+            {loading ? 'Calculating...' : 'Calculate Projected Grade'}
+          </button>
+        </div>
       </div>
 
       {error && (
