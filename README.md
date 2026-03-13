@@ -89,33 +89,3 @@ cp .env.example .env
 | POST | `/api/feedback` | Submit feedback |
 
 All endpoints accept `{ token, canvasUrl }` in the request body.
-
-## Deployment
-
-### Backend — Render (free tier)
-
-1. Push to GitHub
-2. New Web Service on [Render](https://render.com)
-   - Root directory: `backend`
-   - Build command: `pip install -r requirements.txt`
-   - Start command: `gunicorn app:app`
-3. Copy your Render URL
-
-### Frontend — Vercel (free tier)
-
-1. Update `frontend/vercel.json` with your Render backend URL
-2. New project on [Vercel](https://vercel.com)
-   - Root directory: `frontend`
-   - Framework: Vite
-   - Add env var: `VITE_API_URL=https://your-backend.onrender.com`
-3. Deploy
-
-See [DEPLOYMENT.md](DEPLOYMENT.md) for full step-by-step instructions.
-
-> **Note**: Render's free tier sleeps after 15 minutes of inactivity — the first request after sleep takes ~30 seconds to wake up.
-
-## Security
-
-- Your Canvas token is stored only in `localStorage` in the browser and sent directly to your own backend
-- Never commit tokens or credentials
-- CORS is open by default — in production you may want to restrict it to your frontend domain
