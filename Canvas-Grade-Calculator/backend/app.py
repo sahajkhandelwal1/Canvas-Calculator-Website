@@ -5,6 +5,7 @@ import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import os
+import concurrent.futures
 
 app = Flask(__name__)
 CORS(app)
@@ -52,8 +53,6 @@ def get_courses():
         response = requests.get(courses_url, headers=headers)
         response.raise_for_status()
         courses = response.json()
-        
-        result = []
         
         # Helper function to get Semester 2 grade from Canvas
         def get_semester2_grade(course_id):
@@ -116,11 +115,11 @@ def get_courses():
             
             return None
         
-        for course in courses:
+        def process_course(course):
             enrollments = course.get("enrollments", [])
             current_score = None
             current_grade = None
-            
+
             # Try to get Semester 2 grade from Canvas first
             semester2_data = get_semester2_grade(course.get('id'))
             if semester2_data and semester2_data['score'] is not None:
@@ -132,13 +131,12 @@ def get_courses():
                     if "computed_current_score" in e:
                         current_score = e["computed_current_score"]
                         current_grade = e["computed_current_grade"]
-                
+
                 # If still no grade available (locked), calculate it manually
                 if current_score is None:
                     calculated_score = calculate_course_grade(course.get('id'))
                     if calculated_score is not None:
                         current_score = round(calculated_score, 2)
-                        # Convert score to letter grade (basic conversion)
                         if calculated_score >= 97:
                             current_grade = "A"
                         elif calculated_score >= 93:
@@ -165,13 +163,17 @@ def get_courses():
                             current_grade = "D-"
                         else:
                             current_grade = "F"
-            
-            result.append({
+
+            return {
                 'id': course.get('id'),
                 'name': course.get('name', 'Unnamed Course'),
                 'current_score': current_score,
                 'current_grade': current_grade
-            })
+            }
+
+        # Process all courses in parallel (each fires 2 Canvas API calls concurrently)
+        with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+            result = list(executor.map(process_course, courses))
         
         # Print course summary (without grades for privacy)
         print(f"📚 Courses loaded:")
