@@ -195,63 +195,57 @@ def get_courses():
 def get_assignments(course_id):
     token = request.json.get('token')
     canvas_url = request.json.get('canvasUrl', 'cuhsd.instructure.com')
-    
+
     if not token:
         return jsonify({'error': 'Token required'}), 400
-    
+
     print(f"📖 Loading assignments for course ID: {course_id}")
-    
+
     BASE_URL = get_base_url(canvas_url)
     headers = make_headers(token)
-    url = f"{BASE_URL}/courses/{course_id}/students/submissions?student_ids[]={USER_ID}&include[]=assignment&include[]=submission_comments&per_page=50"
-    
-    assignments = []
-    max_retries = 2
-    
+    base_url = f"{BASE_URL}/courses/{course_id}/students/submissions?student_ids[]={USER_ID}&include[]=assignment&include[]=submission_comments&per_page=100"
+
+    def fetch_page(url):
+        try:
+            response = requests.get(url, headers=headers, timeout=45)
+            response.raise_for_status()
+            content_type = response.headers.get('Content-Type', '')
+            if 'application/json' not in content_type:
+                return [], None
+            return response.json(), response.headers.get('link', '')
+        except Exception:
+            return [], None
+
     try:
-        while url:
-            retry_count = 0
-            success = False
-            
-            while retry_count < max_retries and not success:
-                try:
-                    response = requests.get(url, headers=headers, timeout=45)
-                    response.raise_for_status()
-                    
-                    # Check if response is JSON
-                    content_type = response.headers.get('Content-Type', '')
-                    if 'application/json' not in content_type:
-                        retry_count += 1
-                        if retry_count < max_retries:
-                            import time
-                            time.sleep(2)
-                            continue
-                        return jsonify({'error': 'Canvas returned an invalid response. The course may be too large or temporarily unavailable.'}), 500
-                    
-                    submissions = response.json()
-                    assignments.extend(submissions)
-                    success = True
-                    
-                except requests.exceptions.Timeout:
-                    retry_count += 1
-                    if retry_count < max_retries:
-                        import time
-                        time.sleep(2)
-                    else:
-                        raise
-            
-            if not success:
-                break
-                
-            if 'link' in response.headers:
-                links = response.headers['link'].split(',')
-                url = None
-                for link in links:
-                    if 'rel="next"' in link:
-                        url = link[link.find('<')+1 : link.find('>')]
-            else:
-                url = None
-        
+        # Fetch first page to discover pagination
+        first_page, link_header = fetch_page(base_url)
+        if first_page is None:
+            return jsonify({'error': 'Canvas returned an invalid response.'}), 500
+
+        assignments = list(first_page)
+
+        # Parse last page number from Link header
+        last_page = 1
+        if link_header:
+            for part in link_header.split(','):
+                if 'rel="last"' in part:
+                    try:
+                        last_url = part[part.find('<')+1:part.find('>')]
+                        import re
+                        match = re.search(r'[?&]page=(\d+)', last_url)
+                        if match:
+                            last_page = int(match.group(1))
+                    except Exception:
+                        pass
+
+        # Fetch remaining pages in parallel
+        if last_page > 1:
+            remaining_urls = [f"{base_url}&page={p}" for p in range(2, last_page + 1)]
+            with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+                for page_data, _ in executor.map(fetch_page, remaining_urls):
+                    if page_data:
+                        assignments.extend(page_data)
+
         print(f"   ✓ Loaded {len(assignments)} assignments")
         return jsonify(assignments)
     except requests.exceptions.RequestException as e:
