@@ -1390,6 +1390,14 @@ function App() {
             </div>
           )}
           {error && <div className="error">{error}</div>}
+          <a
+            href="https://usecanvascalc.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="marketing-link"
+          >
+            Learn more at usecanvascalc.com →
+          </a>
         </div>
       </div>
     )

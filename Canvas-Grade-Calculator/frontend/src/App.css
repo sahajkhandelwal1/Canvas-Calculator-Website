@@ -189,6 +189,20 @@
   cursor: not-allowed;
 }
 
+.marketing-link {
+  display: block;
+  margin-top: 1.25rem;
+  text-align: center;
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.4);
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+
+.marketing-link:hover {
+  color: rgba(255, 255, 255, 0.75);
+}
+
 .progress-container {
   margin-top: 1.5rem;
   animation: fadeIn 0.3s ease;
