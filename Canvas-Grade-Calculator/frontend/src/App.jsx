@@ -217,6 +217,9 @@ function App() {
   const [loadingSemesterGrades, setLoadingSemesterGrades] = useState(false)
   const hasAppliedInitialSemesterFilter = useRef(false)
   
+  // Session-only cache for assignments+groups — resets on page refresh so grades are always fresh
+  const sessionCourseCache = useRef({})
+
   // Cache for course data to speed up semester calculations
   const [courseDataCache, setCourseDataCache] = useState(() => {
     const cached = localStorage.getItem('courseDataCache')
@@ -865,12 +868,12 @@ function App() {
     try {
       let assignmentsData, groupsData
 
-      // Use cached data if available (avoids round-trip to Canvas API)
-      const cached = getCachedCourseData(courseId)
-      if (cached?.assignments && cached?.groups) {
-        console.log(`   ✓ Using cached data for course ${courseId}`)
-        assignmentsData = cached.assignments
-        groupsData = cached.groups
+      // Use session cache if available (resets on refresh — grades always fresh on new load)
+      const sessionCached = sessionCourseCache.current[courseId]
+      if (sessionCached) {
+        console.log(`   ✓ Using session cache for course ${courseId}`)
+        assignmentsData = sessionCached.assignments
+        groupsData = sessionCached.groups
       } else {
         const [assignmentsRes, groupsRes] = await Promise.all([
           fetch(`/api/course/${courseId}/assignments`, {
@@ -897,8 +900,8 @@ function App() {
           throw new Error('Invalid response from Canvas API. Your session may have expired.')
         }
 
-        // Cache for future visits within this session
-        setCachedCourseData(courseId, { assignments: assignmentsData, groups: groupsData })
+        // Store in session cache for fast revisits within this page load
+        sessionCourseCache.current[courseId] = { assignments: assignmentsData, groups: groupsData }
       }
 
       setAssignments(assignmentsData)
