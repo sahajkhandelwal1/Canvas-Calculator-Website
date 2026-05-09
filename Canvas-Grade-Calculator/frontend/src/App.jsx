@@ -76,81 +76,6 @@ function SortableCourseCard({ course, onClick, displayName }) {
   )
 }
 
-// Pure client-side grade calculation — mirrors calculate_grade_logic in backend/app.py
-function calculateGradeLogic(assignments, assignmentGroups, modifications = {}) {
-  const groupMap = {}
-  assignmentGroups.forEach(g => { groupMap[g.id] = g })
-
-  const grouped = {}
-  assignments.forEach((s, i) => {
-    const assignment = s.assignment || {}
-    const groupId = assignment.assignment_group_id
-    if (assignment.omit_from_final_grade || !groupId) return
-    if (!grouped[groupId]) grouped[groupId] = []
-    grouped[groupId].push({ i, s, assignment })
-  })
-
-  let totalWeight = 0
-  let weightedGrade = 0
-
-  for (const [groupId, groupAssignments] of Object.entries(grouped)) {
-    const groupInfo = groupMap[parseInt(groupId)] || {}
-    const groupWeight = groupInfo.group_weight || 0
-    const dropLowest = groupInfo.rules?.drop_lowest || 0
-    const dropHighest = groupInfo.rules?.drop_highest || 0
-    const neverDrop = groupInfo.rules?.never_drop || []
-
-    const all = []
-    for (const { i, s, assignment } of groupAssignments) {
-      const possible = assignment.points_possible || 0
-      const earned = (modifications[i] !== undefined) ? modifications[i] : s.score
-      if (possible > 0 && earned !== null && earned !== undefined) {
-        all.push({
-          earned,
-          possible,
-          percentage: (earned / possible) * 100,
-          id: assignment.id,
-          neverDrop: neverDrop.includes(assignment.id)
-        })
-      }
-    }
-
-    if (all.length > 0) {
-      const pinned = all.filter(a => a.neverDrop)
-      let droppable = all.filter(a => !a.neverDrop).sort((a, b) => a.percentage - b.percentage)
-      if (dropLowest > 0 && droppable.length > dropLowest) droppable = droppable.slice(dropLowest)
-      if (dropHighest > 0 && droppable.length > dropHighest) droppable = droppable.slice(0, droppable.length - dropHighest)
-
-      const final = [...pinned, ...droppable]
-      const groupEarned = final.reduce((sum, a) => sum + a.earned, 0)
-      const groupPossible = final.reduce((sum, a) => sum + a.possible, 0)
-
-      if (groupPossible > 0) {
-        weightedGrade += (groupEarned / groupPossible) * 100 * groupWeight / 100
-        totalWeight += groupWeight
-      }
-    }
-  }
-
-  if (totalWeight === 0) {
-    // No weighted groups — plain percentage across all graded assignments
-    const all = []
-    for (const groups of Object.values(grouped)) {
-      for (const { i, s, assignment } of groups) {
-        const possible = assignment.points_possible || 0
-        const earned = (modifications[i] !== undefined) ? modifications[i] : s.score
-        if (earned !== null && earned !== undefined && possible > 0) {
-          all.push({ earned, possible })
-        }
-      }
-    }
-    if (all.length === 0) return null
-    return (all.reduce((sum, a) => sum + a.earned, 0) / all.reduce((sum, a) => sum + a.possible, 0)) * 100
-  }
-
-  return totalWeight !== 100 ? (weightedGrade / totalWeight) * 100 : weightedGrade
-}
-
 function App() {
   const [token, setToken] = useState(() => {
     return localStorage.getItem('canvasToken') || ''
@@ -217,9 +142,6 @@ function App() {
   const [loadingSemesterGrades, setLoadingSemesterGrades] = useState(false)
   const hasAppliedInitialSemesterFilter = useRef(false)
   
-  // Session-only cache for assignments+groups — resets on page refresh so grades are always fresh
-  const sessionCourseCache = useRef({})
-
   // Cache for course data to speed up semester calculations
   const [courseDataCache, setCourseDataCache] = useState(() => {
     const cached = localStorage.getItem('courseDataCache')
@@ -499,8 +421,19 @@ function App() {
               return { ...course, current_score: null, current_grade: 'N/A' }
             }
             
-            // Calculate grade for this semester (client-side)
-            const semesterScore = calculateGradeLogic(semesterAssignments, groupsData, {})
+            // Calculate grade for this semester
+            const gradeRes = await fetch('/api/calculate-grade', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                assignments: semesterAssignments,
+                assignment_groups: groupsData,
+                modifications: {}
+              })
+            })
+            
+            const gradeData = await gradeRes.json()
+            const semesterScore = gradeData.grade
             
             // Convert to letter grade using course's grading scheme
             const letterGrade = scoreToLetterGrade(semesterScore, gradingScheme)
@@ -551,7 +484,18 @@ function App() {
         })
       }
       
-      setCurrentGrade(calculateGradeLogic(filteredAssignments, assignmentGroups, {}))
+      const response = await fetch('/api/calculate-grade', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          assignments: filteredAssignments,
+          assignment_groups: assignmentGroups,
+          modifications: {} // Use empty modifications for current grade baseline
+        })
+      })
+      
+      const data = await response.json()
+      setCurrentGrade(data.grade)
       
       // Don't reset modifications, dropped assignments, or projected grade
       // Let the user keep their what-if changes when switching semesters
@@ -866,57 +810,56 @@ function App() {
     }
     
     try {
-      let assignmentsData, groupsData
-
-      // Use session cache if available (resets on refresh — grades always fresh on new load)
-      const sessionCached = sessionCourseCache.current[courseId]
-      if (sessionCached) {
-        console.log(`   ✓ Using session cache for course ${courseId}`)
-        assignmentsData = sessionCached.assignments
-        groupsData = sessionCached.groups
-      } else {
-        const [assignmentsRes, groupsRes] = await Promise.all([
-          fetch(`/api/course/${courseId}/assignments`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ token, canvasUrl })
-          }),
-          fetch(`/api/course/${courseId}/groups`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ token, canvasUrl })
-          })
-        ])
-
-        if (!assignmentsRes.ok || !groupsRes.ok) {
-          throw new Error('Failed to load course data. Please try refreshing.')
-        }
-
-        try {
-          assignmentsData = await assignmentsRes.json()
-          groupsData = await groupsRes.json()
-        } catch (jsonError) {
-          console.error('JSON parse error:', jsonError)
-          throw new Error('Invalid response from Canvas API. Your session may have expired.')
-        }
-
-        // Store in session cache for fast revisits within this page load
-        sessionCourseCache.current[courseId] = { assignments: assignmentsData, groups: groupsData }
+      const [assignmentsRes, groupsRes] = await Promise.all([
+        fetch(`/api/course/${courseId}/assignments`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token, canvasUrl })
+        }),
+        fetch(`/api/course/${courseId}/groups`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token, canvasUrl })
+        })
+      ])
+      
+      if (!assignmentsRes.ok || !groupsRes.ok) {
+        throw new Error('Failed to load course data. Please try refreshing.')
       }
-
+      
+      let assignmentsData, groupsData
+      try {
+        assignmentsData = await assignmentsRes.json()
+        groupsData = await groupsRes.json()
+      } catch (jsonError) {
+        console.error('JSON parse error:', jsonError)
+        throw new Error('Invalid response from Canvas API. Your session may have expired.')
+      }
+      
       setAssignments(assignmentsData)
       setAssignmentGroups(groupsData)
       setSelectedCourse(courses.find(c => c.id === courseId))
-
-      // Calculate current grade for Semester 2 (client-side — no network round-trip)
+      
+      // Calculate current grade for Semester 2 (since that's our default)
       const semester2Assignments = assignmentsData.filter((assignment) => {
         const dueDate = assignment?.assignment?.due_at
         if (!dueDate) return true // Include assignments without due dates
         return getSemester(dueDate) === 2
       })
-
-      setCurrentGrade(calculateGradeLogic(semester2Assignments, groupsData, {}))
-
+      
+      const gradeRes = await fetch('/api/calculate-grade', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          assignments: semester2Assignments,
+          assignment_groups: groupsData,
+          modifications: {}
+        })
+      })
+      
+      const gradeData = await gradeRes.json()
+      setCurrentGrade(gradeData.grade)
+      
       // Calculate semester grades after loading assignments
       // Pass the new assignments data directly to avoid stale state
       calculateSemesterGradesForCourse(assignmentsData, groupsData)
@@ -927,22 +870,24 @@ function App() {
     }
   }
 
-  // Helper function to calculate semester grades with explicit data (fully client-side)
-  const calculateSemesterGradesForCourse = (assignmentsData, groupsData) => {
+  // Helper function to calculate semester grades with explicit data
+  const calculateSemesterGradesForCourse = async (assignmentsData, groupsData) => {
     try {
-      // Semester 1
+      // Calculate Semester 1 grade
       const semester1Assignments = assignmentsData.filter((assignment) => {
         const dueDate = assignment?.assignment?.due_at
         if (!dueDate) return false
         return getSemester(dueDate) === 1
       })
 
-      const semester1Filtered = semester1Assignments.filter((_, index) => {
+      // Filter out dropped assignments for semester 1
+      const semester1FilteredAssignments = semester1Assignments.filter((_, index) => {
         const originalIndex = assignmentsData.indexOf(semester1Assignments[index])
         return !droppedAssignments[originalIndex]
       })
 
-      const semester1WithHypotheticals = [...semester1Filtered]
+      // Add hypothetical assignments for semester 1
+      const semester1WithHypotheticals = [...semester1FilteredAssignments]
       Object.entries(hypotheticalAssignments).forEach(([groupId, hypoAssignments]) => {
         hypoAssignments.forEach(hypo => {
           if (hypo.score !== '' && hypo.pointsPossible !== '') {
@@ -951,7 +896,7 @@ function App() {
                 assignment_group_id: parseInt(groupId),
                 points_possible: parseFloat(hypo.pointsPossible),
                 name: hypo.name || 'Hypothetical Assignment',
-                due_at: new Date(new Date().getFullYear(), 8, 1).toISOString()
+                due_at: new Date(new Date().getFullYear(), 8, 1).toISOString() // Default to Sept 1 (Semester 1)
               },
               score: parseFloat(hypo.score)
             })
@@ -960,6 +905,7 @@ function App() {
       })
 
       if (semester1WithHypotheticals.length > 0) {
+        // Create modifications map with original indices for semester 1
         const semester1Modifications = {}
         semester1Assignments.forEach((assignment, semesterIndex) => {
           const originalIndex = assignmentsData.indexOf(assignment)
@@ -967,24 +913,37 @@ function App() {
             semester1Modifications[semesterIndex] = modifications[originalIndex]
           }
         })
-        setSemester1Grade(calculateGradeLogic(semester1WithHypotheticals, groupsData, semester1Modifications))
+
+        const response1 = await fetch('/api/calculate-grade', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            assignments: semester1WithHypotheticals,
+            assignment_groups: groupsData,
+            modifications: semester1Modifications
+          })
+        })
+        const data1 = await response1.json()
+        setSemester1Grade(data1.grade)
       } else {
         setSemester1Grade(null)
       }
 
-      // Semester 2
+      // Calculate Semester 2 grade
       const semester2Assignments = assignmentsData.filter((assignment) => {
         const dueDate = assignment?.assignment?.due_at
         if (!dueDate) return false
         return getSemester(dueDate) === 2
       })
 
-      const semester2Filtered = semester2Assignments.filter((_, index) => {
+      // Filter out dropped assignments for semester 2
+      const semester2FilteredAssignments = semester2Assignments.filter((_, index) => {
         const originalIndex = assignmentsData.indexOf(semester2Assignments[index])
         return !droppedAssignments[originalIndex]
       })
 
-      const semester2WithHypotheticals = [...semester2Filtered]
+      // Add hypothetical assignments for semester 2
+      const semester2WithHypotheticals = [...semester2FilteredAssignments]
       Object.entries(hypotheticalAssignments).forEach(([groupId, hypoAssignments]) => {
         hypoAssignments.forEach(hypo => {
           if (hypo.score !== '' && hypo.pointsPossible !== '') {
@@ -993,7 +952,7 @@ function App() {
                 assignment_group_id: parseInt(groupId),
                 points_possible: parseFloat(hypo.pointsPossible),
                 name: hypo.name || 'Hypothetical Assignment',
-                due_at: new Date(new Date().getFullYear(), 1, 1).toISOString()
+                due_at: new Date(new Date().getFullYear(), 1, 1).toISOString() // Default to Feb 1 (Semester 2)
               },
               score: parseFloat(hypo.score)
             })
@@ -1002,6 +961,7 @@ function App() {
       })
 
       if (semester2WithHypotheticals.length > 0) {
+        // Create modifications map with original indices for semester 2
         const semester2Modifications = {}
         semester2Assignments.forEach((assignment, semesterIndex) => {
           const originalIndex = assignmentsData.indexOf(assignment)
@@ -1009,7 +969,18 @@ function App() {
             semester2Modifications[semesterIndex] = modifications[originalIndex]
           }
         })
-        setSemester2Grade(calculateGradeLogic(semester2WithHypotheticals, groupsData, semester2Modifications))
+
+        const response2 = await fetch('/api/calculate-grade', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            assignments: semester2WithHypotheticals,
+            assignment_groups: groupsData,
+            modifications: semester2Modifications
+          })
+        })
+        const data2 = await response2.json()
+        setSemester2Grade(data2.grade)
       } else {
         setSemester2Grade(null)
       }
@@ -1156,7 +1127,18 @@ function App() {
         })
       })
       
-      setProjectedGrade(calculateGradeLogic(allAssignments, assignmentGroups, modifications))
+      const response = await fetch('/api/calculate-grade', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          assignments: allAssignments,
+          assignment_groups: assignmentGroups,
+          modifications
+        })
+      })
+      
+      const data = await response.json()
+      setProjectedGrade(data.grade)
       setShowCalculatePrompt(false) // Hide prompt after successful calculation
       
       // Also recalculate semester grades with modifications using current assignments
@@ -1213,7 +1195,17 @@ function App() {
           }
         })
 
-        setSemester1Grade(calculateGradeLogic(semester1WithHypotheticals, assignmentGroups, semester1Modifications))
+        const response1 = await fetch('/api/calculate-grade', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            assignments: semester1WithHypotheticals,
+            assignment_groups: assignmentGroups,
+            modifications: semester1Modifications
+          })
+        })
+        const data1 = await response1.json()
+        setSemester1Grade(data1.grade)
       } else {
         setSemester1Grade(null)
       }
@@ -1259,7 +1251,17 @@ function App() {
           }
         })
 
-        setSemester2Grade(calculateGradeLogic(semester2WithHypotheticals, assignmentGroups, semester2Modifications))
+        const response2 = await fetch('/api/calculate-grade', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            assignments: semester2WithHypotheticals,
+            assignment_groups: assignmentGroups,
+            modifications: semester2Modifications
+          })
+        })
+        const data2 = await response2.json()
+        setSemester2Grade(data2.grade)
       } else {
         setSemester2Grade(null)
       }
