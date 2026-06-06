@@ -130,6 +130,8 @@ function App() {
   })
   const [showNameEditor, setShowNameEditor] = useState(false)
   const [userInfo, setUserInfo] = useState({ name: 'Anonymous', id: null })
+  const [showPastEnrollments, setShowPastEnrollments] = useState(false)
+  const [loadingCourses, setLoadingCourses] = useState(false)
   const [assignmentSearch, setAssignmentSearch] = useState('')
   const [showAssignmentSearch, setShowAssignmentSearch] = useState(false)
   const [showCalculatePrompt, setShowCalculatePrompt] = useState(false)
@@ -653,7 +655,7 @@ function App() {
     }
   }, [])
 
-  const handleLogin = async (e) => {
+  const handleLogin = async (e, enrollmentState = 'active') => {
     e.preventDefault()
     setLoading(true)
     setError('')
@@ -680,9 +682,9 @@ function App() {
       const response = await fetch('/api/courses', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token, canvasUrl })
+        body: JSON.stringify({ token, canvasUrl, enrollmentState })
       })
-      
+
       setLoadingProgress(75) // After fetch completes
       
       if (!response.ok) throw new Error('Invalid token or network error')
@@ -727,45 +729,53 @@ function App() {
       // Set initial history state for courses page
       window.history.replaceState({ page: 'courses' }, '', '#courses')
       
-      // Fetch upcoming assignments in background
-      setLoadingUpcoming(true)
-      fetch('/api/upcoming-assignments', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token, canvasUrl })
-      })
-        .then(res => {
-          if (res.ok) return res.json()
-          throw new Error('Failed to fetch')
+      // Only fetch upcoming/overdue for active enrollments
+      if (enrollmentState === 'active') {
+        // Fetch upcoming assignments in background
+        setLoadingUpcoming(true)
+        fetch('/api/upcoming-assignments', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token, canvasUrl })
         })
-        .then(data => {
-          setUpcomingAssignments(data || [])
-          setLoadingUpcoming(false)
-        })
-        .catch(err => {
-          console.error('Error fetching upcoming:', err)
-          setLoadingUpcoming(false)
-        })
+          .then(res => {
+            if (res.ok) return res.json()
+            throw new Error('Failed to fetch')
+          })
+          .then(data => {
+            setUpcomingAssignments(data || [])
+            setLoadingUpcoming(false)
+          })
+          .catch(err => {
+            console.error('Error fetching upcoming:', err)
+            setLoadingUpcoming(false)
+          })
 
-      // Fetch overdue assignments in background
-      setLoadingOverdue(true)
-      fetch('/api/overdue-assignments', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token, canvasUrl })
-      })
-        .then(res => {
-          if (res.ok) return res.json()
-          throw new Error('Failed to fetch')
+        // Fetch overdue assignments in background
+        setLoadingOverdue(true)
+        fetch('/api/overdue-assignments', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token, canvasUrl })
         })
-        .then(data => {
-          setOverdueAssignments(data || [])
-          setLoadingOverdue(false)
-        })
-        .catch(err => {
-          console.error('Error fetching overdue:', err)
-          setLoadingOverdue(false)
-        })
+          .then(res => {
+            if (res.ok) return res.json()
+            throw new Error('Failed to fetch')
+          })
+          .then(data => {
+            setOverdueAssignments(data || [])
+            setLoadingOverdue(false)
+          })
+          .catch(err => {
+            console.error('Error fetching overdue:', err)
+            setLoadingOverdue(false)
+          })
+      } else {
+        setUpcomingAssignments([])
+        setOverdueAssignments([])
+        setLoadingUpcoming(false)
+        setLoadingOverdue(false)
+      }
     } catch (err) {
       setError(err.message)
     } finally {
@@ -777,6 +787,29 @@ function App() {
         setShowSlowLoadingMessage(false)
         setLoadingProgress(0)
       }, 300) // Brief delay to show 100%
+    }
+  }
+
+  const reloadCourses = async (enrollmentState) => {
+    setLoadingCourses(true)
+    setCourses([])
+    try {
+      const response = await fetch('/api/courses', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token, canvasUrl, enrollmentState })
+      })
+      if (!response.ok) throw new Error('Failed to load courses')
+      const data = await response.json()
+      setCourses(data.courses || data)
+      if (enrollmentState !== 'active') {
+        setUpcomingAssignments([])
+        setOverdueAssignments([])
+      }
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setLoadingCourses(false)
     }
   }
 
@@ -1420,7 +1453,7 @@ function App() {
               setIsAuthenticated(false)
               localStorage.removeItem('canvasToken')
               localStorage.removeItem('canvasUrl')
-              clearCourseCache() // Clear cache on logout
+              clearCourseCache()
               setToken('')
               setCanvasUrl('cuhsd.instructure.com')
             }} className="logout-btn">
@@ -1437,11 +1470,24 @@ function App() {
               <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
               <line x1="12" y1="17" x2="12.01" y2="17"/>
             </svg>
-            <span>Showing current Semester 2 grades • Click any course for detailed analysis and what-if calculations</span>
+            <span>{showPastEnrollments ? 'Showing past (concluded) enrollments • Click any course for detailed analysis' : 'Showing current Semester 2 grades • Click any course for detailed analysis and what-if calculations'}</span>
           </div>
         </div>
         
-        {isMobile() ? (
+        {loadingCourses ? (
+          // Loading skeletons while courses are being fetched
+          <div className="courses-grid">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="course-card-skeleton">
+                <div className="skeleton-title" />
+                <div className="skeleton-grade">
+                  <div className="skeleton-letter" />
+                  <div className="skeleton-percent" />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : isMobile() ? (
           // On mobile, render course cards without drag-and-drop
           <div className="courses-grid">
             {courses.map(course => (
@@ -1455,9 +1501,9 @@ function App() {
                   <div className="grade">
                     <span className="grade-letter">{course.current_grade}</span>
                     <span className="grade-percent">
-                      <CountUp 
-                        from={0} 
-                        to={course.current_score} 
+                      <CountUp
+                        from={0}
+                        to={course.current_score}
                         duration={1}
                         className="count-up-text"
                       />%
@@ -1468,6 +1514,24 @@ function App() {
                 )}
               </div>
             ))}
+            <div
+              className={`course-card past-toggle-card ${showPastEnrollments ? 'past-toggle-card--active' : ''}`}
+              onClick={() => {
+                const next = !showPastEnrollments
+                setShowPastEnrollments(next)
+                reloadCourses(next ? 'concluded' : 'active')
+              }}
+            >
+              <div className="past-toggle-icon">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                  <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+                  <path d="M3 3v5h5"/>
+                  <path d="M12 7v5l4 2"/>
+                </svg>
+              </div>
+              <h3>{showPastEnrollments ? 'Back to Current Courses' : 'View Past Courses'}</h3>
+              <div className="past-toggle-sub">{showPastEnrollments ? 'Switch to active enrollments' : 'See concluded enrollments'}</div>
+            </div>
           </div>
         ) : (
           // On desktop, render with drag-and-drop functionality
@@ -1489,6 +1553,24 @@ function App() {
                     onClick={() => loadCourse(course.id)}
                   />
                 ))}
+                <div
+                  className={`course-card past-toggle-card ${showPastEnrollments ? 'past-toggle-card--active' : ''}`}
+                  onClick={() => {
+                    const next = !showPastEnrollments
+                    setShowPastEnrollments(next)
+                    reloadCourses(next ? 'concluded' : 'active')
+                  }}
+                >
+                  <div className="past-toggle-icon">
+                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                      <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+                      <path d="M3 3v5h5"/>
+                      <path d="M12 7v5l4 2"/>
+                    </svg>
+                  </div>
+                  <h3>{showPastEnrollments ? 'Back to Current Courses' : 'View Past Courses'}</h3>
+                  <div className="past-toggle-sub">{showPastEnrollments ? 'Switch to active enrollments' : 'See concluded enrollments'}</div>
+                </div>
               </div>
             </SortableContext>
           </DndContext>

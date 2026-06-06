@@ -25,13 +25,17 @@ def get_base_url(canvas_url):
 def get_courses():
     token = request.json.get('token')
     canvas_url = request.json.get('canvasUrl', 'cuhsd.instructure.com')
-    
+    enrollment_state = request.json.get('enrollmentState', 'active')
+    # Only allow valid enrollment states
+    if enrollment_state not in ('active', 'concluded', 'all'):
+        enrollment_state = 'active'
+
     if not token:
         return jsonify({'error': 'Token required'}), 400
-    
+
     BASE_URL = get_base_url(canvas_url)
     headers = make_headers(token)
-    
+
     # Get user info for logging and response
     try:
         user_response = requests.get(f"{BASE_URL}/users/{USER_ID}", headers=headers, timeout=5)
@@ -46,8 +50,8 @@ def get_courses():
             print(f"{'='*60}")
     except:
         user_info = {'name': 'Unknown User', 'id': 'Unknown ID'}
-    
-    courses_url = f"{BASE_URL}/users/{USER_ID}/courses?enrollment_state=active&include[]=enrollments&include[]=total_scores"
+
+    courses_url = f"{BASE_URL}/users/{USER_ID}/courses?enrollment_state={enrollment_state}&include[]=enrollments&include[]=total_scores"
     
     try:
         response = requests.get(courses_url, headers=headers)
