@@ -801,11 +801,64 @@ function App() {
       })
       if (!response.ok) throw new Error('Failed to load courses')
       const data = await response.json()
-      setCourses(data.courses || data)
-      if (enrollmentState !== 'active') {
+      let newCourses = data.courses || data
+
+      if (enrollmentState === 'concluded') {
+        // Canvas's grading-period grade is inaccurate for concluded courses.
+        // Replicate the detail-view logic: fetch assignments, filter to S2, calculate.
+        const withS2Grades = await Promise.all(
+          newCourses.map(async (course) => {
+            try {
+              const [assignmentsRes, groupsRes, schemeRes] = await Promise.all([
+                fetch(`/api/course/${course.id}/assignments`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ token, canvasUrl })
+                }),
+                fetch(`/api/course/${course.id}/groups`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ token, canvasUrl })
+                }),
+                fetch(`/api/course/${course.id}/grading-scheme`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ token, canvasUrl })
+                })
+              ])
+              if (!assignmentsRes.ok || !groupsRes.ok) return course
+
+              const assignmentsData = await assignmentsRes.json()
+              const groupsData = await groupsRes.json()
+              const schemeData = await schemeRes.json()
+              const gradingScheme = schemeData?.grading_scheme
+
+              // Filter to Semester 2 assignments (Jan–Jul due dates)
+              const s2 = assignmentsData.filter((a) => {
+                const due = a?.assignment?.due_at
+                if (!due) return true
+                return getSemester(due) === 2
+              })
+              if (s2.length === 0) return { ...course, current_score: null, current_grade: 'N/A' }
+
+              const gradeRes = await fetch('/api/calculate-grade', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ assignments: s2, assignment_groups: groupsData, modifications: {} })
+              })
+              const { grade: score } = await gradeRes.json()
+              return { ...course, current_score: score, current_grade: scoreToLetterGrade(score, gradingScheme) }
+            } catch {
+              return course
+            }
+          })
+        )
+        newCourses = withS2Grades
         setUpcomingAssignments([])
         setOverdueAssignments([])
       }
+
+      setCourses(newCourses)
     } catch (err) {
       setError(err.message)
     } finally {
